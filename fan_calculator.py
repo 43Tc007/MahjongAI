@@ -216,18 +216,18 @@ def calculate_fan_from_hand(
 
     max_fan = 0
     for division in divisions:
-        temp_fan = base_fan + \
-            ping_hu(division) + \
-            dui_dui_hu(division) + \
-            fan_pai(division, player, game.round_wind, game.game_wind) + \
-            hua_yao(division) + \
-            qing_yao(division) + \
-            da_xiao_san_yuan(division) + \
-            qing_hun_yi_se(division) + \
-            zi_yi_se(division) + \
-            da_xiao_si_xi(division) + \
+        temp_fan = (base_fan + 
+            ping_hu(division) + 
+            dui_dui_hu(division) + 
+            fan_pai(division, player, game.round_wind, game.game_wind) + 
+            hua_yao(division) + 
+            qing_yao(division) + 
+            da_xiao_san_yuan(division) + 
+            qing_hun_yi_se(division) + 
+            zi_yi_se(division) + 
+            da_xiao_si_xi(division) + 
             kan_kan_hu(game, player, division, win_tile)
-
+        )
         if temp_fan > max_fan:
             max_fan = temp_fan
 

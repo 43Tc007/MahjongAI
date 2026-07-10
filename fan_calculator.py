@@ -192,7 +192,7 @@ def hua_hu(game: MahjongGame, player: int, win_tile: int) -> int:
     return 0
 
 
-def calculate_fan_from_hand(
+def calculate_fan(
     game: MahjongGame, player: int, win_tile: int) -> int:
     winning_player: Player = game.players[player]
     success, divisions = divide_from_tensors(winning_player.hand, winning_player.melds)

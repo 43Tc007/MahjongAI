@@ -1,5 +1,5 @@
 import torch
-from typing import List, Tuple
+from typing import List, Optional, Tuple, cast
 from collections import Counter
 
 # ------------------------------------------------------------------
@@ -43,21 +43,23 @@ def pack_to_str(p: Tuple[int, int]) -> str:
 # ------------------------------------------------------------------
 # Core recursive algorithm (unchanged)
 # ------------------------------------------------------------------
-def divide_tail_add_division(fixed_cnt: int, work_division: List[Tuple[int, int]],
+def divide_tail_add_division(fixed_cnt: int, work_division: List[Optional[Tuple[int, int]]],
                              result: List[List[Tuple[int, int]]]) -> None:
     temp = work_division[:]
+    assert all(entry is not None for entry in temp)
     melds = temp[fixed_cnt:4]
-    melds_sorted = sorted(melds, key=pack_key)
+    melds_t = cast(List[Tuple[int, int]], melds)
+    melds_sorted = sorted(melds_t, key=pack_key)
     temp[fixed_cnt:4] = melds_sorted
     for d in result:
         existing_melds = d[fixed_cnt:4]
         existing_sorted = sorted(existing_melds, key=pack_key)
         if existing_sorted == melds_sorted:
             return
-    result.append(temp)
+    result.append(cast(List[Tuple[int, int]], temp))
 
 def divide_tail(cnt_table: List[int], fixed_cnt: int,
-                work_division: List[Tuple[int, int]],
+                work_division: List[Optional[Tuple[int, int]]],
                 result: List[List[Tuple[int, int]]]) -> bool:
     for t in ALL_TILES:
         if cnt_table[t] >= 2:
@@ -71,12 +73,13 @@ def divide_tail(cnt_table: List[int], fixed_cnt: int,
     return False
 
 def is_division_branch_exist(fixed_cnt: int, step: int,
-                             work_division: List[Tuple[int, int]],
+                             work_division: List[Optional[Tuple[int, int]]],
                              result: List[List[Tuple[int, int]]]) -> bool:
     if not result or step < 3:
         return False
     current_melds = work_division[fixed_cnt:fixed_cnt+step]
-    current_sorted = sorted(current_melds, key=pack_key)
+    assert all(entry is not None for entry in current_melds)
+    current_sorted = sorted(cast(List[Tuple[int, int]], current_melds), key=pack_key)
     current_counter = Counter(current_sorted)
     for d in result:
         existing_melds = d[fixed_cnt:4]
@@ -87,7 +90,7 @@ def is_division_branch_exist(fixed_cnt: int, step: int,
     return False
 
 def divide_recursively(cnt_table: List[int], fixed_cnt: int, step: int,
-                       work_division: List[Tuple[int, int]],
+                       work_division: List[Optional[Tuple[int, int]]],
                        result: List[List[Tuple[int, int]]]) -> bool:
     idx = step + fixed_cnt
     if idx == 4:
@@ -122,12 +125,12 @@ def divide_recursively(cnt_table: List[int], fixed_cnt: int, step: int,
     return ret
 
 def divide_win_hand(cnt_table: List[int],
-                    fixed_packs: List[Tuple[int, int]] = None) -> Tuple[bool, List[List[Tuple[int, int]]]]:
+                    fixed_packs: Optional[List[Tuple[int, int]]] = None) -> Tuple[bool, List[List[Tuple[int, int]]]]:
     if fixed_packs is None:
         fixed_packs = []
     fixed_cnt = len(fixed_packs)
-    result = []
-    work_division = fixed_packs + [None] * (5 - fixed_cnt)
+    result: List[List[Tuple[int, int]]] = []
+    work_division: List[Optional[Tuple[int, int]]] = fixed_packs + [None] * (5 - fixed_cnt)
     success = divide_recursively(cnt_table, fixed_cnt, 0, work_division, result)
     return success, result
 
@@ -149,11 +152,11 @@ def divide_from_tensors(hand_tensor: torch.Tensor,
         (success, divisions)
     """
     # Standing hand count table (directly from the tensor)
-    cnt_table = hand_tensor[:TILE_COUNT].tolist()
+    cnt_table: List[int] = [int(x) for x in hand_tensor[:TILE_COUNT]]
 
-    fixed_packs = []
+    fixed_packs: List[Tuple[int, int]] = []
     for row in fixed_melds_tensor:
-        row_counts = row[:TILE_COUNT].tolist()
+        row_counts: List[int] = [int(x) for x in row[:TILE_COUNT]]
         total = sum(row_counts)
         if total == 0:
             continue  # empty row – ignore
@@ -218,5 +221,4 @@ if __name__ == "__main__":
     for i, div in enumerate(divisions):
         print(f"Division {i+1}:")
         for j, pack in enumerate(div):
-            if pack is not None:
-                print(f"  {j}: {pack_to_str(pack)}")
+            print(f"  {j}: {pack_to_str(pack)}")

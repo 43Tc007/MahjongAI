@@ -1,5 +1,5 @@
 import torch
-from typing import *
+from typing import List, Dict
 from mahjong_helper import is_flower
 import random
 
@@ -10,11 +10,11 @@ NORTH = 3
 
 class Player():
     def __init__(self):
-        self.hand: torch.Tensor = torch.zeros(42, dtype=torch.unit8)
-        self.melds: torch.Tensor = torch.zeros(4, 42, dtype=torch.unit8)
-        self.flowers: torch.Tensor = torch.zeros(42, dtype=torch.unit8)
+        self.hand: torch.Tensor = torch.zeros(42, dtype=torch.uint8)
+        self.melds: torch.Tensor = torch.zeros(4, 42, dtype=torch.uint8)
+        self.flowers: torch.Tensor = torch.zeros(42, dtype=torch.uint8)
         self.addkan: Dict[int, int] = {} # tile -> meld_index
-        self.men_qian_qing = True
+        self.men_qian_qing: bool = True
 
     def current_state(self) -> torch.Tensor:
         return torch.vstack([self.hand, self.melds, self.flowers])
@@ -34,14 +34,14 @@ class Player():
 
 class MahjongGame():
     def __init__(self, round_wind: int, game_wind: int):
-        self.players: List[Player] = [Player() for i in range(4)]
+        self.players: List[Player] = [Player() for _ in range(4)]
         self.wall: List[int] = list(range(34)) * 4 + list(range(34, 42))
         random.shuffle(self.wall)
         self.next_tile_index: int = 0
         self.round_wind: int = round_wind
         self.game_wind: int = game_wind
         self.current_player: int = EAST
-        self.log = torch.zeros(107, 42 + 4, dtype=torch.unit8)
+        self.log = torch.zeros(107, 42 + 4, dtype=torch.uint8)
         self.logline = 0
 
         self.game_start()

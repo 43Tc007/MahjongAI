@@ -13,6 +13,8 @@ def is_dragon(tile: int) -> bool:
 def seat(player: int, game_wind: int):
     return (player - game_wind + 4) % 4
 
+def is_zi(tile: int):
+    return is_wind(tile) or is_dragon(tile)
 
 tiles_name = {
     # Manzu (characters)

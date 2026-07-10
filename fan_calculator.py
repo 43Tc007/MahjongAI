@@ -119,3 +119,6 @@ def jiu_zi_lian_huan(hand: torch.Tensor) -> int:
             return 13  # base is 0, 9, or 18, identifying the suit
     return 0
 
+def si_gang_zi(calls: torch.Tensor) -> int:
+    return 13 * (calls.sum(dim=1) == 4).all().item()
+

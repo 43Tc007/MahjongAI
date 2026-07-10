@@ -2,6 +2,39 @@ from hand_divisor import divide_from_tensors, CHOW, PUNG, PAIR
 from mahjong_helper import *
 import torch
 from typing import List, Tuple
+from game_and_players import MahjongGame, Player
+
+"""
+無花 done
+正花 done
+門前清 ip
+平胡 done
+翻牌 done
+搶杠 bonus
+杠上開花 bonus
+海底 bonus
+自摸 bonus
+花幺 done
+一臺花 done
+七只花 special
+對對胡 done
+混一色 done
+小三元 done
+清一色 done
+大三元 done
+天湖 ip
+地湖 ip
+四杠子 done
+坎坎胡 <- need help
+杠上杠自摸
+大花胡 special
+字一色 done
+小四喜 done
+大四喜 done
+請幺 done
+十三幺 done / special
+九子連環 done
+"""
 
 # --- flowers ---
 
@@ -127,4 +160,21 @@ def shi_san_yao(hand: torch.Tensor) -> int:
         0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33,
     ])
     return (hand[indices] >= 1).all().item() * 13
+
+def tian_hu(game):
+    pass # check for no discard
+
+def di_hu(game):
+    pass # check for first discard and declare win
+
+def men_qian_qing(game):
+    pass # check for player status
+
+
+def fan_calculator(game: MahjongGame, player: int, hand: torch.Tensor, calls: torch.Tensor, *, bonus: int, special: int):
+    total_fan = bonus
+    if special:
+        return special
+    
+
 

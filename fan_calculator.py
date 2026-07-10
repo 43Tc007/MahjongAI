@@ -2,37 +2,37 @@ from hand_divisor import divide_from_tensors, CHOW, PUNG, PAIR
 from mahjong_helper import *
 import torch
 from typing import List, Tuple
-from game_and_players import MahjongGame, Player
+from game_and_players import *
 
 """
 無花 done
 正花 done
-門前清 ip
+門前清 done
 平胡 done
 翻牌 done
-搶杠 bonus
-杠上開花 bonus
-海底 bonus
-自摸 bonus
+搶杠 done
+杠上開花 done
+海底 done
+自摸 done
 花幺 done
 一臺花 done
-七只花 special
+七只花 done
 對對胡 done
 混一色 done
 小三元 done
 清一色 done
 大三元 done
-天湖 ip
-地湖 ip
+天湖 done
+地湖 done
 四杠子 done
-坎坎胡 <- need help
+坎坎胡 done
 杠上杠自摸
-大花胡 special
+大花胡 done
 字一色 done
 小四喜 done
 大四喜 done
 請幺 done
-十三幺 done / special
+十三幺 done
 九子連環 done
 """
 
@@ -80,13 +80,13 @@ def fan_pai(division: List[Tuple[int, int]], player: int, round_wind: int, game_
     return res
 
 def hua_yao(division: List[Tuple[int, int]]) -> int:
-    for type, tile in division:
+    for pack_type, tile in division:
         if not (is_19(tile) or is_zi(tile)):
             return 0
     return 1
 
 def qing_yao(division: List[Tuple[int, int]]) -> int:
-    for type, tile in division:
+    for pack_type, tile in division:
         if not is_19(tile):
             return 0
     return 13
@@ -94,10 +94,10 @@ def qing_yao(division: List[Tuple[int, int]]) -> int:
 def da_xiao_san_yuan(division: List[Tuple[int, int]]) -> int:
     seen = 0
     pair_is_dragon = False
-    for type, tile in division:
+    for pack_type, tile in division:
         if is_dragon(tile):
             seen += 1
-            if type == PAIR:
+            if pack_type == PAIR:
                 pair_is_dragon = True
         
     if seen != 3:
@@ -109,7 +109,7 @@ def da_xiao_san_yuan(division: List[Tuple[int, int]]) -> int:
 def qing_hun_yi_se(division: List[Tuple[int, int]]) -> int:
     suit = -1
     zi_present = False
-    for type, tile in division:
+    for pack_type, tile in division:
         if is_zi(tile):
             zi_present = True
             continue
@@ -121,17 +121,17 @@ def qing_hun_yi_se(division: List[Tuple[int, int]]) -> int:
     return 3 if zi_present else 7
 
 def zi_yi_se(division: List[Tuple[int, int]]) -> int:
-    for type, tile in division:
+    for pack_type, tile in division:
         if not is_zi(tile):
             return 0
     return 13
 
 def da_xiao_si_xi(division: List[Tuple[int, int]]) -> int:
     seen = 0
-    for type, tile in division:
+    for pack_type, tile in division:
         if is_wind(tile):
             seen += 1
-            if type == PAIR:
+            if pack_type == PAIR:
                 pair_is_wind = True    
     if seen != 3:
         return 0
@@ -161,20 +161,39 @@ def shi_san_yao(hand: torch.Tensor) -> int:
     ])
     return (hand[indices] >= 1).all().item() * 13
 
-def tian_hu(game):
-    pass # check for no discard
+def tsumo(game: MahjongGame, player: int) -> int:
+    return (game.current_player == player) * 1
 
-def di_hu(game):
-    pass # check for first discard and declare win
+def tian_hu(game: MahjongGame, player: int) -> int:
+    if player != EAST:
+        return 0
+    return (game.log[:, :42] == 0).all().item() * 13
 
-def men_qian_qing(game):
-    pass # check for player status
+def di_hu(game: MahjongGame, player: int) -> int:
+    if tsumo(game, player):
+        return 0
+    return (game.log[:, :42].sum() == 1).item() * 13
 
+def men_qian_qing(game: MahjongGame, player: int) -> int:
+    return game.players[int].men_qian_qing * 1
 
-def fan_calculator(game: MahjongGame, player: int, hand: torch.Tensor, calls: torch.Tensor, *, bonus: int, special: int):
-    total_fan = bonus
-    if special:
-        return special
-    
+def hai_di_lao_yue(game: MahjongGame) -> int:
+    return (game.remaining_tiles() == 0) * 1
+
+def qiang_gang(game: MahjongGame, player: int) -> int:
+    return (game.log[game.logline, :42].sum().item() == 4 and game.current_player != player) * 1
+
+def gang_shang_kai_hua(game: MahjongGame, player: int) -> int:
+    return (game.log[game.logline, :42].sum().item() == 4 and game.current_player == player) * 1
+
+def kan_kan_hu(game: MahjongGame, player: int, division: List[Tuple[int, int]], win_tile: int) -> int:
+    if tsumo(game, player):
+        return men_qian_qing(game, player) * 13
+    pair_tile: List[int] = [tile for pack_type, tile in division if pack_type == PAIR][0]
+    return (win_tile == pair_tile) * 13
+
+def hua_hu(game: MahjongGame, player: int, win_tile: int):
+    if is_flower(win_tile):
+        return (game.players[player].flowers.sum() == 7) * 3 + (game.players[player].flowers.sum() == 8) * 13
 
 

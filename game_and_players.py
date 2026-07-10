@@ -10,9 +10,9 @@ NORTH = 3
 
 class Player():
     def __init__(self):
-        self.hand: torch.Tensor = torch.zeros(42)
-        self.melds: torch.Tensor = torch.zeros(4, 42)
-        self.flowers: torch.Tensor = torch.zeros(42)
+        self.hand: torch.Tensor = torch.zeros(42, dtype=torch.unit8)
+        self.melds: torch.Tensor = torch.zeros(4, 42, dtype=torch.unit8)
+        self.flowers: torch.Tensor = torch.zeros(42, dtype=torch.unit8)
         self.addkan: Dict[int, int] = {} # tile -> meld_index
         self.men_qian_qing = True
 
@@ -41,6 +41,8 @@ class MahjongGame():
         self.round_wind: int = round_wind
         self.game_wind: int = game_wind
         self.current_player: int = EAST
+        self.log = torch.zeros(107, 42 + 4, dtype=torch.unit8)
+        self.logline = 0
 
         self.game_start()
         

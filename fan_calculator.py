@@ -37,11 +37,11 @@ def dui_dui_hu(division: List[Tuple[int, int]]) -> int:
             return 0
     return True
 
-def fan_pai(divison: List[Tuple[int, int]], player: int, round_wind: int, game_wind: int) -> int:
+def fan_pai(division: List[Tuple[int, int]], player: int, round_wind: int, game_wind: int) -> int:
     res = 0
     seat_wind = seat(player, game_wind)
     targets = [seat_wind + 27, round_wind + 27, 31, 32, 33]
-    for pack in divison:
+    for pack in division:
         if pack[1] in targets:
             res += 1
     return res
@@ -121,4 +121,10 @@ def jiu_zi_lian_huan(hand: torch.Tensor) -> int:
 
 def si_gang_zi(calls: torch.Tensor) -> int:
     return 13 * (calls.sum(dim=1) == 4).all().item()
+
+def shi_san_yao(hand: torch.Tensor) -> int:
+    indices = torch.tensor([
+        0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33,
+    ])
+    return (hand[indices] >= 1).all().item() * 13
 

@@ -1,5 +1,5 @@
 import torch
-from typing import List
+from typing import List, Dict
 from dataclasses import dataclass, field
 import copy
 
@@ -58,6 +58,7 @@ class GameState:
     flowers: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
     melds: List[List[torch.Tensor]] = field(default_factory=lambda: [[] for _ in range(4)])
     men_qian_qing: List[bool] = field(default_factory=lambda: [True for _ in range(4)])
+    addkanable_tiles: List[Dict[int, int]] = field(default_factory=lambda: [{}, {}, {}, {}])
 
     # Log: each row is [tile one‑hot (42) + player one‑hot (4)]
     log: torch.Tensor = field(default_factory=lambda: torch.zeros(MAX_LOG_ENTRIES, 42 + 4, dtype=torch.uint8))
@@ -67,3 +68,4 @@ def game_state_mask(game: GameState, player_idx: int) -> GameState:
     masked_game = copy.copy(game)
     masked_game.hands = [masked_game.hands[player_idx]]
     return masked_game
+

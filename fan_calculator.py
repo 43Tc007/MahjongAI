@@ -2,26 +2,6 @@ from hand_divisor import divide_from_tensors, CHOW, PUNG, PAIR
 from mahjong_helper import *
 import torch
 from typing import List, Tuple
-from dataclasses import dataclass, field
-
-MAX_LOG_ENTRIES = 107   # as in original code
-
-@dataclass
-class GameState:
-    round_wind: int
-    game_wind: int
-    current_player: int
-    wall_remaining: int
-
-    # Player-specific data
-    hands: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
-    flowers: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
-    melds: List[List[torch.Tensor]] = field(default_factory=lambda: [[] for _ in range(4)])
-    men_qian_qing: List[bool] = field(default_factory=lambda: [True for _ in range(4)])
-
-    # Log: each row is [tile one‑hot (42) + player one‑hot (4)]
-    log: torch.Tensor = field(default_factory=lambda: torch.zeros(MAX_LOG_ENTRIES, 42 + 4, dtype=torch.uint8))
-    logline: int = 0
 
 """
 無花 done

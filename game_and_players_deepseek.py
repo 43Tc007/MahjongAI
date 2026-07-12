@@ -1,36 +1,32 @@
 import torch
-from typing import List, Optional
+from typing import List
 from mahjong_helper import *
 import random
 from abc import ABC, abstractmethod
 
-from fan_calculator import GameState
-
-
 class Player(ABC):
     """Pure decision‑maker with no stored state – all state comes from the arbiter."""
     def __init__(self):
-        self.arbiter: Optional['Arbiter'] = None
         self.player_idx: int = -1
 
     @abstractmethod
-    def choose_discard(self) -> int:
+    def choose_discard(self, masked_game: GameState) -> int:
         pass
 
     @abstractmethod
-    def chow_decision(self) -> bool:
+    def chow_decision(self, masked_game: GameState) -> bool:
         pass
 
     @abstractmethod
-    def pung_decision(self) -> bool:
+    def pung_decision(self, masked_game: GameState) -> bool:
         pass
 
     @abstractmethod
-    def kan_decision(self) -> bool:
+    def kan_decision(self, masked_game: GameState) -> bool:
         pass
 
     @abstractmethod
-    def ron_decision(self) -> bool:
+    def ron_decision(self, masked_game: GameState) -> bool:
         pass
 
 
@@ -40,7 +36,6 @@ class Arbiter:
 
         for idx, p in enumerate(self.players):
             p.player_idx = idx
-            p.arbiter = self
 
         self.state = GameState(
             round_wind=round_wind,
@@ -117,19 +112,19 @@ class Arbiter:
     # # --- Decision requests (called by the game) ---
 
     def request_discard(self, player_idx: int) -> int:
-        return self.players[player_idx].choose_discard()
+        return self.players[player_idx].choose_discard(game_state_mask(self.state, player_idx))
 
     def request_chow(self, player_idx: int) -> bool:
-        return self.players[player_idx].chow_decision()
+        return self.players[player_idx].chow_decision(game_state_mask(self.state, player_idx))
 
     def request_pung(self, player_idx: int) -> bool:
-        return self.players[player_idx].pung_decision()
+        return self.players[player_idx].pung_decision(game_state_mask(self.state, player_idx))
 
     def request_kan(self, player_idx: int) -> bool:
-        return self.players[player_idx].kan_decision()
+        return self.players[player_idx].kan_decision(game_state_mask(self.state, player_idx))
     
     def request_ron(self, player_idx: int) -> bool:
-        return self.players[player_idx].ron_decision()
+        return self.players[player_idx].ron_decision(game_state_mask(self.state, player_idx))
 
     # # --- Meld execution helpers ---
 

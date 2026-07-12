@@ -2,8 +2,32 @@ from hand_divisor import divide_from_tensors, CHOW, PUNG, PAIR
 from mahjong_helper import *
 import torch
 from typing import List, Tuple
-from game_and_players import *
+from dataclasses import dataclass, field
 
+MAX_LOG_ENTRIES = 107   # as in original code
+
+@dataclass
+class GameState:
+    round_wind: int
+    game_wind: int
+    current_player: int
+    wall_remaining: int
+
+    # Player-specific data
+    hands: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
+    flowers: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
+    melds: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(4, 42, dtype=torch.uint8) for _ in range(4)])
+    
+    # Menqianqing flag: True if player has no open melds (no calls from others)
+    men_qian_qing: List[bool] = field(default_factory=lambda: [True for _ in range(4)])
+
+    # Log: each row is [tile one‑hot (42) + player one‑hot (4)]
+    log: torch.Tensor = field(default_factory=lambda: torch.zeros(MAX_LOG_ENTRIES, 42 + 4, dtype=torch.uint8))
+    logline: int = 0
+
+    # Convenience: last discard
+    last_discard: int = -1
+    last_discard_player: int = -1
 """
 無花 done
 正花 done
@@ -155,63 +179,68 @@ def shi_san_yao(hand: torch.Tensor) -> int:
     ])
     return int((hand[indices] >= 1).all().item()) * 13
 
-def tsumo(game: MahjongGame, player: int) -> int:
+def tsumo(game: GameState, player: int) -> int:
     return (game.current_player == player) * 1
 
-def tian_hu(game: MahjongGame, player: int) -> int:
+def tian_hu(game: GameState, player: int) -> int:
     if player != EAST:
         return 0
     return int((game.log[:, :42] == 0).all().item()) * 13
 
-def di_hu(game: MahjongGame, player: int) -> int:
+def di_hu(game: GameState, player: int) -> int:
     if tsumo(game, player):
         return 0
     return int((game.log[:, :42].sum() == 1).item()) * 13
 
-def men_qian_qing(game: MahjongGame, player: int) -> int:
-    return int(game.players[player].men_qian_qing) * 1
+def men_qian_qing(game: GameState, player: int) -> int:
+    return int(game.men_qian_qing[player]) * 1
 
-def hai_di_lao_yue(game: MahjongGame) -> int:
-    return (game.remaining_tiles() == 0) * 1
+def hai_di_lao_yue(game: GameState) -> int:
+    return (game.wall_remaining == 0) * 1
 
-def qiang_gang(game: MahjongGame, player: int) -> int:
+def qiang_gang(game: GameState, player: int) -> int:
     return (game.log[game.logline, :42].sum().item() == 4 and game.current_player != player) * 1
 
-def gang_shang_kai_hua(game: MahjongGame, player: int) -> int:
+def gang_shang_kai_hua(game: GameState, player: int) -> int:
     return (game.log[game.logline, :42].sum().item() == 4 and game.current_player == player) * 1
 
-def kan_kan_hu(game: MahjongGame, player: int, division: List[Tuple[int, int]], win_tile: int) -> int:
+def kan_kan_hu(game: GameState, player: int, division: List[Tuple[int, int]], win_tile: int) -> int:
     if tsumo(game, player):
         return men_qian_qing(game, player) * 13
     pair_tile: int = [tile for pack_type, tile in division if pack_type == PAIR][0]
     return (win_tile == pair_tile) * 13
 
-def hua_hu(game: MahjongGame, player: int, win_tile: int) -> int:
+def hua_hu(game: GameState, player: int, win_tile: int) -> int:
     if is_flower(win_tile):
-        return int((game.players[player].flowers.sum() == 7) * 3 + (game.players[player].flowers.sum() == 8)) * 13
+        return int((game.flowers[player].sum() == 7) * 3 + (game.flowers[player].sum() == 8)) * 13
     return 0
 
 
 def calculate_fan(
-    game: MahjongGame, player: int, win_tile: int) -> int:
-    winning_player: Player = game.players[player]
-    success, divisions = divide_from_tensors(winning_player.hand, winning_player.melds)
+    game: GameState, player: int, win_tile: int) -> int:
+    success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
+
+
+    if hua_hu(game, player, win_tile):
+        return hua_hu(game, player, win_tile)
+    if shi_san_yao(game.hands[player]):
+        return 13
+    
+    # ---- Base fan (independent of the chosen meld division) ----
     assert success
 
-    # ---- Base fan (independent of the chosen meld division) ----
     base_fan = (
-        flowers(winning_player.flowers, player, game.game_wind) +
-        jiu_zi_lian_huan(winning_player.hand) +
-        si_gang_zi(winning_player.melds) +
-        shi_san_yao(winning_player.hand) +
+        flowers(game.flowers[player], player, game.game_wind) +
+        jiu_zi_lian_huan(game.hands[player]) +
+        si_gang_zi(game.melds[player]) +
+        shi_san_yao(game.hands[player]) +
         tsumo(game, player) +
         tian_hu(game, player) +
         di_hu(game, player) +
         men_qian_qing(game, player) +
         hai_di_lao_yue(game) +
         qiang_gang(game, player) +
-        gang_shang_kai_hua(game, player) +
-        hua_hu(game, player, win_tile)
+        gang_shang_kai_hua(game, player) 
     )
 
     max_fan = 0

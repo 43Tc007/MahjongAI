@@ -32,3 +32,8 @@ tiles_name = {
     # Black flowers
     38: "black flower 1", 39: "black flower 2", 40: "black flower 3", 41: "black flower 4"
 }
+
+EAST = 0
+SOUTH = 1
+WEST = 2
+NORTH = 3

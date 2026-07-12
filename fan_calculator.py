@@ -16,18 +16,13 @@ class GameState:
     # Player-specific data
     hands: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
     flowers: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
-    melds: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(4, 42, dtype=torch.uint8) for _ in range(4)])
-    
-    # Menqianqing flag: True if player has no open melds (no calls from others)
+    melds: List[List[torch.Tensor]] = field(default_factory=lambda: [[] for _ in range(4)])
     men_qian_qing: List[bool] = field(default_factory=lambda: [True for _ in range(4)])
 
     # Log: each row is [tile one‑hot (42) + player one‑hot (4)]
     log: torch.Tensor = field(default_factory=lambda: torch.zeros(MAX_LOG_ENTRIES, 42 + 4, dtype=torch.uint8))
     logline: int = 0
 
-    # Convenience: last discard
-    last_discard: int = -1
-    last_discard_player: int = -1
 """
 無花 done
 正花 done
@@ -218,7 +213,31 @@ def hua_hu(game: GameState, player: int, win_tile: int) -> int:
 
 def calculate_fan(
     game: GameState, player: int, win_tile: int) -> int:
-    success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
+
+    def stack_to_tensor(lst: List[torch.Tensor]) -> torch.Tensor:
+        """
+        Convert a list of up to 4 torch.Tensors (each of length 42)
+        into a single torch.Tensor with 4 rows.
+        Pads with zeros if fewer than 4 tensors are provided.
+        
+        Parameters
+        ----------
+        lst : List[torch.Tensor]
+            A list of torch.Tensors, each of shape (42,).
+            Maximum length is 4.
+        
+        Returns
+        -------
+        torch.Tensor
+            A tensor of shape (4, 42).
+        """
+        pad_tensor = torch.zeros(42)
+        while len(lst) < 4:
+            lst.append(pad_tensor)
+        return torch.stack(lst)
+    
+    player_melds = stack_to_tensor(game.melds[player])
+    success, divisions = divide_from_tensors(game.hands[player], player_melds)
 
 
     if hua_hu(game, player, win_tile):
@@ -232,7 +251,7 @@ def calculate_fan(
     base_fan = (
         flowers(game.flowers[player], player, game.game_wind) +
         jiu_zi_lian_huan(game.hands[player]) +
-        si_gang_zi(game.melds[player]) +
+        si_gang_zi(player_melds) +
         shi_san_yao(game.hands[player]) +
         tsumo(game, player) +
         tian_hu(game, player) +

@@ -1,4 +1,4 @@
-# import torch
+import torch
 from typing import List, Optional
 from mahjong_helper import *
 import random
@@ -29,10 +29,13 @@ class Player(ABC):
     def kan_decision(self) -> bool:
         pass
 
+    @abstractmethod
+    def ron_decision(self) -> bool:
+        pass
+
 
 class Arbiter:
-    def __init__(self, players: List[Player],
-                 round_wind: int = EAST, game_wind: int = EAST):
+    def __init__(self, players: List[Player], round_wind: int = EAST, game_wind: int = EAST):
         self.players = players
 
         for idx, p in enumerate(self.players):
@@ -63,113 +66,99 @@ class Arbiter:
     def record_flower(self, player_idx: int, tile: int) -> None:
         self.state.flowers[player_idx][tile] += 1
 
-    # def add_meld(self, player_idx: int, meld: torch.Tensor) -> None:
-    #     self.state.melds[player_idx].append(meld)
+    def add_meld(self, player_idx: int, meld: torch.Tensor) -> None:
+        self.state.melds[player_idx].append(meld)
+        
+    def record_action(self, line: torch.Tensor) -> None:
+        self.state.log[self.state.logline] = line
+        self.state.logline += 1
 
-    # def record_action(self, player_idx: int, tile: int) -> None:
-    #     """
-    #     Record a log entry for an action (discard or call).
-    #     The tile column is set to 1, and the player column (42+player_idx) is set to 1.
-    #     This also updates last_discard if it's a discard (i.e., when called from discard).
-    #     We separate discard and call recording for clarity, but both use this.
-    #     """
-    #     row = self.state.logline
-    #     if row >= MAX_LOG_ENTRIES:
-    #         raise RuntimeError("Log capacity exceeded")
-    #     # Set tile one‑hot
-    #     self.state.log[row, tile] = 1
-    #     # Set player one‑hot
-    #     self.state.log[row, 42 + player_idx] = 1
-    #     self.state.logline += 1
+    def record_discard(self, player_idx: int, tile: int) -> None:
+        """Record a discard in the log and update last_discard."""
+        line = torch.zeros(42, dtype=torch.uint8)
+        line[tile] = 1
+        line[player_idx + 42] = 1
+        self.record_action(line)
 
-    # def record_discard(self, player_idx: int, tile: int) -> None:
-    #     """Record a discard in the log and update last_discard."""
-    #     self.record_action(player_idx, tile)
-    #     self.state.last_discard = tile
-    #     self.state.last_discard_player = player_idx
-
-    # def record_call(self, player_idx: int, tile: int) -> None:
-    #     """Record a call (chow/pung/kan) in the log. Does not update last_discard."""
-    #     self.record_action(player_idx, tile)
+    def record_call(self, player_idx: int, meld: torch.Tensor) -> None:
+        """Record a call (chow/pung/kan) in the log. Does not update last_discard."""
+        line = meld
+        line[42 + player_idx] = 1
+        self.record_action(line)        
 
     # # --- Query methods for players ---
 
-    # def get_hand(self, player_idx: int) -> torch.Tensor:
-    #     return self.state.hands[player_idx]
+    def get_hand(self, player_idx: int) -> torch.Tensor:
+        return self.state.hands[player_idx]
 
-    # def get_flowers(self, player_idx: int) -> torch.Tensor:
-    #     return self.state.flowers[player_idx]
+    def get_flowers(self, player_idx: int) -> torch.Tensor:
+        return self.state.flowers[player_idx]
 
-    # def get_melds(self, player_idx: int) -> List[torch.Tensor]:
-    #     return self.state.melds[player_idx]
+    def get_melds(self, player_idx: int) -> List[torch.Tensor]:
+        return self.state.melds[player_idx]
 
-    # def get_last_discard(self) -> int:
-    #     return self.state.last_discard
+    def get_current_player(self) -> int:
+        return self.state.current_player
 
-    # def get_last_discard_player(self) -> int:
-    #     return self.state.last_discard_player
+    def get_wall_remaining(self) -> int:
+        return self.state.wall_remaining
 
-    # def get_current_player(self) -> int:
-    #     return self.state.current_player
+    def get_log(self) -> torch.Tensor:
+        """Return the entire log tensor."""
+        return self.state.log
 
-    # def get_wall_remaining(self) -> int:
-    #     return self.state.wall_remaining
+    def get_logline(self) -> int:
+        return self.state.logline
 
-    # def get_log(self) -> torch.Tensor:
-    #     """Return the entire log tensor."""
-    #     return self.state.log
-
-    # def get_logline(self) -> int:
-    #     return self.state.logline
-
-    # def get_log_entry(self, idx: int) -> torch.Tensor:
-    #     """Return a specific log row."""
-    #     return self.state.log[idx]
+    def get_log_entry(self, idx: int) -> torch.Tensor:
+        """Return a specific log row."""
+        return self.state.log[idx]
 
     # # --- Decision requests (called by the game) ---
 
-    # def request_discard(self, player_idx: int) -> int:
-    #     return self.players[player_idx].choose_discard()
+    def request_discard(self, player_idx: int) -> int:
+        return self.players[player_idx].choose_discard()
 
-    # def request_chow(self, player_idx: int) -> bool:
-    #     return self.players[player_idx].chow_decision()
+    def request_chow(self, player_idx: int) -> bool:
+        return self.players[player_idx].chow_decision()
 
-    # def request_pung(self, player_idx: int) -> bool:
-    #     return self.players[player_idx].pung_decision()
+    def request_pung(self, player_idx: int) -> bool:
+        return self.players[player_idx].pung_decision()
 
-    # def request_kan(self, player_idx: int) -> bool:
-    #     return self.players[player_idx].kan_decision()
+    def request_kan(self, player_idx: int) -> bool:
+        return self.players[player_idx].kan_decision()
+    
+    def request_ron(self, player_idx: int) -> bool:
+        return self.players[player_idx].ron_decision()
 
     # # --- Meld execution helpers ---
 
-    # def execute_chow(self, player_idx: int, tile: int, tiles_for_chow: List[int]) -> None:
-    #     for t in tiles_for_chow:
-    #         self.remove_from_hand(player_idx, t)
-    #     meld = torch.zeros(42, dtype=torch.uint8)
-    #     meld[tile] += 1
-    #     for t in tiles_for_chow:
-    #         meld[t] += 1
-    #     self.add_meld(player_idx, meld)
-    #     self.record_call(player_idx, tile)   # log the call
+    def execute_chow(self, player_idx: int, tile: int, tiles_for_chow: List[int]) -> None:
+        for t in tiles_for_chow:
+            self.remove_from_hand(player_idx, t)
+        meld = torch.zeros(42, dtype=torch.uint8)
+        meld[tiles_for_chow + [tile]] = 1
+        self.add_meld(player_idx, meld)
+        self.record_call(player_idx, meld)   # log the call
 
-    # def execute_pung(self, player_idx: int, tile: int) -> None:
-    #     self.remove_from_hand(player_idx, tile)
-    #     self.remove_from_hand(player_idx, tile)
-    #     meld = torch.zeros(42, dtype=torch.uint8)
-    #     meld[tile] += 3
-    #     self.add_meld(player_idx, meld)
-    #     self.record_call(player_idx, tile)
+    def execute_pung(self, player_idx: int, tile: int) -> None:
+        self.remove_from_hand(player_idx, tile)
+        self.remove_from_hand(player_idx, tile)
+        meld = torch.zeros(42, dtype=torch.uint8)
+        meld[tile] += 3
+        self.add_meld(player_idx, meld)
+        self.record_call(player_idx, meld)
 
-    # def execute_kan(self, player_idx: int, tile: int) -> None:
-    #     for _ in range(3):
-    #         self.remove_from_hand(player_idx, tile)
-    #     meld = torch.zeros(42, dtype=torch.uint8)
-    #     meld[tile] += 4
-    #     self.add_meld(player_idx, meld)
-    #     self.record_call(player_idx, tile)
+    def execute_kan(self, player_idx: int, tile: int) -> None:
+        for _ in range(3):
+            self.remove_from_hand(player_idx, tile)
+        meld = torch.zeros(42, dtype=torch.uint8)
+        meld[tile] += 4
+        self.add_meld(player_idx, meld)
+        self.record_call(player_idx, meld)
     
-    # def execute_ron(self, player_idx: int, tile: int) -> None:
-    #     pass # pass through fan calculator and adjust win loss
+    def execute_ron(self, player_idx: int, tile: int) -> None:
+        pass # pass through fan calculator and adjust win loss
 
 
 class MahjongGame:

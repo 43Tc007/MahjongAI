@@ -38,13 +38,18 @@ tiles_name = {
     38: "black flower 1", 39: "black flower 2", 40: "black flower 3", 41: "black flower 4"
 }
 
+
+
 EAST = 0
 SOUTH = 1
 WEST = 2
 NORTH = 3
 
+DRAW_PHASE = 0
+DISCARD_PHASE = 1
+CALL_PHASE = 2
 
-MAX_LOG_ENTRIES = 107   # as in original code
+MAX_LOG_ENTRIES = 128  
 
 @dataclass
 class GameState:
@@ -52,6 +57,7 @@ class GameState:
     game_wind: int
     current_player: int
     wall_remaining: int
+    phase: int = DRAW_PHASE
 
     # Player-specific data
     hands: List[torch.Tensor] = field(default_factory=lambda: [torch.zeros(42, dtype=torch.uint8) for _ in range(4)])
@@ -64,8 +70,19 @@ class GameState:
     log: torch.Tensor = field(default_factory=lambda: torch.zeros(MAX_LOG_ENTRIES, 42 + 4, dtype=torch.uint8))
     logline: int = 0
 
+    # Convenience:
+    last_discard: int = -1
+
 def game_state_mask(game: GameState, player_idx: int) -> GameState:
     masked_game = copy.copy(game)
     masked_game.hands = [masked_game.hands[player_idx]]
     return masked_game
 
+def is_subsequently_called(gamestate: GameState, logline: int):
+    line = gamestate.log[logline]
+    subsequent_line = gamestate.log[logline + 1]
+    if subsequent_line.sum() == 0:
+        return False
+    discarded_tile = torch.nonzero(line, as_tuple=True)[0][0].item()
+    called_tile = torch.nonzero(line, as_tuple=True)[0][0].item()
+    return True if (subsequent_line.sum() == 4 or (subsequent_line.sum() == 5 and discarded_tile == called_tile)) else False

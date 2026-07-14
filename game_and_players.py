@@ -34,6 +34,11 @@ class Player(ABC):
 class RandomPlayer(Player):
     def __init__(self):
         super().__init__()
+
+    @override
+    def choose_discard(self, masked_game: GameState) -> int:
+        discardable_tiles = torch.nonzero(masked_game.hands[0]).squeeze()
+        return int(discardable_tiles[random.randint(0, len(discardable_tiles) - 1)].item())
     
     @override
     def chow_decision(self, masked_game: GameState) -> bool:
@@ -91,16 +96,19 @@ class Arbiter:
 
     def record_discard(self, player_idx: int, tile: int) -> None:
         """Record a discard in the log and update last_discard."""
-        line = torch.zeros(42, dtype=torch.uint8)
+        line = torch.zeros(42 + 4, dtype=torch.uint8)
         line[tile] = 1
         line[player_idx + 42] = 1
         self.record_action(line)
 
     def record_call(self, player_idx: int, meld: torch.Tensor) -> None:
         """Record a call (chow/pung/kan) in the log. Does not update last_discard."""
-        line = meld
-        line[42 + player_idx] = 1
-        self.record_action(line)        
+        line = torch.hstack([meld, torch.zeros(4, dtype=torch.uint8)])
+        line[player_idx + 42] = 1
+        self.record_action(line)
+
+    def update_phase(self):
+        self.state.phase = (self.state.phase + 1) % 3
 
     # # --- Query methods for players ---
 
@@ -149,11 +157,11 @@ class Arbiter:
 
     # # --- Meld execution helpers ---
 
-    def execute_chow(self, player_idx: int, tile: int, tiles_for_chow: List[int]) -> None:
+    def execute_chow(self, player_idx: int, tile: int, tiles_for_chow: Tuple[int, int]) -> None:
         for t in tiles_for_chow:
             self.remove_from_hand(player_idx, t)
         meld = torch.zeros(42, dtype=torch.uint8)
-        meld[tiles_for_chow + [tile]] = 1
+        meld[list(tiles_for_chow) + [tile]] = 1
         self.add_meld(player_idx, meld)
         self.record_call(player_idx, meld)   # log the call
 
@@ -162,10 +170,11 @@ class Arbiter:
         self.remove_from_hand(player_idx, tile)
         meld = torch.zeros(42, dtype=torch.uint8)
         meld[tile] += 3
+        self.state.addkanable_tiles[player_idx][tile] = len(self.state.melds[player_idx])
         self.add_meld(player_idx, meld)
         self.record_call(player_idx, meld)
 
-    def execute_kan(self, player_idx: int, tile: int) -> None:
+    def execute_ming_kan(self, player_idx: int, tile: int) -> None:
         for _ in range(3):
             self.remove_from_hand(player_idx, tile)
         meld = torch.zeros(42, dtype=torch.uint8)
@@ -173,6 +182,20 @@ class Arbiter:
         self.add_meld(player_idx, meld)
         self.record_call(player_idx, meld)
     
+    def execute_an_kan(self, player_idx: int, tile: int) -> None:
+        for _ in range(4):
+            self.remove_from_hand(player_idx, tile)
+        meld = torch.zeros(42, dtype=torch.uint8)
+        meld[tile] += 4
+        self.add_meld(player_idx, meld)
+        self.record_call(player_idx, meld)
+
+    def execute_add_kan(self, player_idx: int, tile: int) -> None:
+        self.remove_from_hand(player_idx, tile)
+        meld_index = self.state.addkanable_tiles[player_idx][tile]
+        self.state.melds[player_idx][meld_index][tile] += 1
+        self.record_call(player_idx, self.state.melds[player_idx][meld_index])
+
     def execute_ron(self, player_idx: int, tile: int) -> None:
         pass # pass through fan calculator and adjust win loss
 
@@ -205,68 +228,114 @@ def addkanable(game: GameState, player_idx: int, tile: int) -> bool:
     return True if tile in game.addkanable_tiles[player_idx].keys() else False
 
 
+
 class MahjongGame:
     def __init__(self, round_wind: int, game_wind: int,
                  players: List[Player]):
         self.arbiter = Arbiter(players, round_wind, game_wind)
         self.round_wind = round_wind
         self.game_wind = game_wind
-        self.current_player = EAST
-
+        self.arbiter.state.current_player = EAST
         self.wall: List[int] = list(range(34)) * 4 + list(range(34, 42))
+        self.need_draw = True
+        self.terminated = False
         random.shuffle(self.wall)
-        self.next_tile_index = 0
         self.arbiter.set_wall_remaining(len(self.wall))
 
         self._deal_hands()
 
     def _deal_hands(self):
         for i in range(4):
-            tiles_to_deal = 14 if i == self.game_wind else 13
+            tiles_to_deal = 13
             for _ in range(tiles_to_deal):
                 self._draw_card(i)
 
-    def _draw_card(self, player_idx: int) -> None:
-        tile = self.wall[self.next_tile_index]
-        self.next_tile_index += 1
+    def _draw_card(self, player_idx: int) -> int:
+        tile = self.wall.pop()
+        self.arbiter.set_wall_remaining(self.remaining_tiles())
         if is_flower(tile):
             self.arbiter.record_flower(player_idx, tile)
             self._draw_card(player_idx)
         else:
             self.arbiter.add_to_hand(player_idx, tile)
-        self.arbiter.set_wall_remaining(self.remaining_tiles())
-
+        return tile
+        
     def remaining_tiles(self) -> int:
-        return len(self.wall) - self.next_tile_index
+        return len(self.wall)
+    
+    def handle_calls_after_discard(self, discard_tile) -> int:
+        for player in range(4):
+            if player == self.arbiter.state.current_player:
+                continue
+            if mingkanable(self.arbiter.state, player, discard_tile):
+                response = self.arbiter.request_kan(player)
+                if response:
+                    self.arbiter.execute_ming_kan(player, discard_tile)
+                    return player
+        for player in range(4):
+            if player == self.arbiter.state.current_player:
+                continue
+            if pungable(self.arbiter.state, player, discard_tile):
+                response = self.arbiter.request_kan(player)
+                if response:
+                    self.arbiter.execute_pung(player, discard_tile)
+                    self.need_draw = False
+                    return player
+        for player in range(4):
+            if player == self.arbiter.state.current_player:
+                continue
+            for duplet in [(discard_tile-2, discard_tile-1), (discard_tile-1, discard_tile+1), (discard_tile+1, discard_tile+2)]: 
+                if chowable(self.arbiter.state, discard_tile, player, duplet):
+                    response = self.arbiter.request_chow(player)
+                    if response:
+                        self.arbiter.execute_chow(player, discard_tile, duplet)
+                        self.need_draw = False
+                        return player
+        
+        return (self.arbiter.state.current_player + 1) % 4
 
-    # def run(self):
-    #     while self.remaining_tiles() > 0:
-    #         self._draw_card(self.current_player)
+    def step(self) -> None:
+        if self.arbiter.state.phase == DRAW_PHASE:
+            self.draw_step()
+            self.arbiter.update_phase()
+        elif self.arbiter.state.phase == DISCARD_PHASE:
+            self.arbiter.state.last_discard = self.discard_step()
+            self.arbiter.update_phase()
+        else:
+            self.call_step(self.arbiter.state.last_discard)
+            self.arbiter.update_phase()
 
-    #         discard_idx = self.arbiter.request_discard(self.current_player)
-    #         if discard_idx == -1:
-    #             break
-    #         self.arbiter.remove_from_hand(self.current_player, discard_idx)
-    #         self.arbiter.record_discard(self.current_player, discard_idx)
+    def call_step(self, discard_tile):
+        next_player = self.handle_calls_after_discard(discard_tile)
+        self.arbiter.set_current_player(next_player)
 
-    #         called = False
-    #         for offset in range(1, 4):
-    #             p_idx = (self.current_player + offset) % 4
-    #             if self.arbiter.request_pung(p_idx):
-    #                 self.arbiter.execute_pung(p_idx, discard_idx)
-    #                 self.current_player = p_idx
-    #                 called = True
-    #                 break
-    #         if not called:
-    #             self.current_player = (self.current_player + 1) % 4
+    def discard_step(self):
+        
+        self.need_draw = True
 
-    #         self.arbiter.set_current_player(self.current_player)
+        # After that we need to choose if discard or not
+        discard_tile = self.arbiter.request_discard(self.arbiter.state.current_player)
+        self.arbiter.record_discard(self.arbiter.state.current_player, discard_tile)
+        self.arbiter.remove_from_hand(self.arbiter.state.current_player, discard_tile)
 
-    #     print("Game ended.")
+        if self.remaining_tiles() <= 0:
+            self.terminated = True
+        return discard_tile
 
+    def draw_step(self):
+        if self.need_draw:
+            tile = self._draw_card(self.arbiter.state.current_player)
+    
+            if addkanable(self.arbiter.state, self.arbiter.state.current_player, tile):
+                response = self.arbiter.request_kan(self.arbiter.state.current_player)
+                if response:
+                    self.arbiter.execute_add_kan(self.arbiter.state.current_player, tile)
 
-
-
+            if ankanable(self.arbiter.state, self.arbiter.state.current_player, tile):
+                response = self.arbiter.request_kan(self.arbiter.state.current_player)
+                if response:
+                    self.arbiter.execute_an_kan(self.arbiter.state.current_player, tile)
+        
 # # Example usage
 # if __name__ == "__main__":
 #     game = MahjongGame(EAST, EAST, [RandomPlayer(), RandomPlayer(), RandomPlayer(), RandomPlayer()])

@@ -3,6 +3,8 @@ from typing import List, Tuple, override
 from mahjong_helper import *
 import random
 from abc import ABC, abstractmethod
+from fan_calculator import calculate_fan
+from hand_divisor import divide_from_tensors
 
 from mahjong_helper import GameState
 
@@ -227,6 +229,24 @@ def ankanable(game: GameState, player_idx: int, tile: int) -> bool:
 def addkanable(game: GameState, player_idx: int, tile: int) -> bool:
     return True if tile in game.addkanable_tiles[player_idx].keys() else False
 
+def ronnable(game: GameState, player_idx: int, tile: int) -> bool:
+    temp = torch.zeros(42)
+    temp[tile] += 1
+    win_combination = game.hands[player_idx] + temp
+    success, _ = divide_from_tensors(win_combination, game.melds[player_idx])
+    if not success:
+        return False
+    copy_game = copy.deepcopy(game)
+    copy_game.hands[player_idx] = win_combination
+    fan = calculate_fan(copy_game, player_idx, tile)
+    return True if fan >= 3 else False
+
+def tsumoable(game: GameState, player_idx: int, tile: int):
+    success, division = divide_from_tensors(game.hands[player_idx], game.melds[player_idx])
+    if not success:
+        return False
+    fan = calculate_fan(game, player_idx, tile)
+    return True if fan >= 3 else False
 
 
 class MahjongGame:
@@ -281,16 +301,14 @@ class MahjongGame:
                     self.arbiter.execute_pung(player, discard_tile)
                     self.need_draw = False
                     return player
-        for player in range(4):
-            if player == self.arbiter.state.current_player:
-                continue
-            for duplet in [(discard_tile-2, discard_tile-1), (discard_tile-1, discard_tile+1), (discard_tile+1, discard_tile+2)]: 
-                if chowable(self.arbiter.state, discard_tile, player, duplet):
-                    response = self.arbiter.request_chow(player)
-                    if response:
-                        self.arbiter.execute_chow(player, discard_tile, duplet)
-                        self.need_draw = False
-                        return player
+        player = (self.arbiter.get_current_player() + 1) % 4
+        for duplet in [(discard_tile-2, discard_tile-1), (discard_tile-1, discard_tile+1), (discard_tile+1, discard_tile+2)]: 
+            if chowable(self.arbiter.state, discard_tile, player, duplet):
+                response = self.arbiter.request_chow(player)
+                if response:
+                    self.arbiter.execute_chow(player, discard_tile, duplet)
+                    self.need_draw = False
+                    return player
         
         return (self.arbiter.state.current_player + 1) % 4
 

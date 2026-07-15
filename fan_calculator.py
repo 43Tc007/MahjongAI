@@ -215,9 +215,8 @@ def calculate_fan(
         while len(lst) < 4:
             lst.append(pad_tensor)
         return torch.stack(lst)
-    
-    player_melds = stack_to_tensor(game.melds[player])
-    success, divisions = divide_from_tensors(game.hands[player], player_melds)
+
+    success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
 
 
     if hua_hu(game, player, win_tile):
@@ -231,7 +230,7 @@ def calculate_fan(
     base_fan = (
         flowers(game.flowers[player], player, game.game_wind) +
         jiu_zi_lian_huan(game.hands[player]) +
-        si_gang_zi(player_melds) +
+        si_gang_zi(stack_to_tensor(game.melds[player])) +
         shi_san_yao(game.hands[player]) +
         tsumo(game, player) +
         tian_hu(game, player) +

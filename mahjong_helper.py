@@ -74,7 +74,7 @@ class GameState:
     last_discard: int = -1
 
 def game_state_mask(game: GameState, player_idx: int) -> GameState:
-    masked_game = copy.copy(game)
+    masked_game = copy.deepcopy(game)
     masked_game.hands = [masked_game.hands[player_idx]]
     return masked_game
 

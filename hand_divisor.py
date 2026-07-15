@@ -138,7 +138,7 @@ def divide_win_hand(cnt_table: List[int],
 # PyTorch wrapper – now handles kan as a special pung
 # ------------------------------------------------------------------
 def divide_from_tensors(hand_tensor: torch.Tensor,
-                        fixed_melds_tensor: torch.Tensor) -> Tuple[bool, List[List[Tuple[int, int]]]]:
+                        fixed_melds_tensor: List[torch.Tensor]) -> Tuple[bool, List[List[Tuple[int, int]]]]:
     """
     Parameters:
         hand_tensor       : shape (42,) – counts of standing tiles (only indices 0..33 used).
@@ -190,35 +190,3 @@ def divide_from_tensors(hand_tensor: torch.Tensor,
     # Call the core algorithm
     return divide_win_hand(cnt_table, fixed_packs)
 
-# ------------------------------------------------------------------
-# Example usage
-# ------------------------------------------------------------------
-if __name__ == "__main__":
-    # Example: hand with a called kan of 1m (fixed) and other melds
-    # Standing hand: 2m,3m,4m (chow), 5p,5p,5p (pung), 6s,7s,8s (chow), and a pair of East (27,27)
-    # Plus a kan of 1m (0,0,0,0?) Actually kan uses 4 ones, so standing hand has no 1m.
-    # Total tiles: kan (4) + chow (3) + pung (3) + chow (3) + pair (2) = 15? That would be 15, but we need 14.
-    # Let's use a correct example: kan (4) + pung (3) + chow (3) + pair (2) = 12, missing one meld.
-    # We'll just show the parsing works.
-    hand = [
-        1, 2, 3,    # 2m,3m,4m
-        13,13,13,   # 5p pung
-        23,24,25,   # 6s,7s,8s chow
-        27,27       # pair of East
-    ]
-    hand_tensor = torch.zeros(42, dtype=torch.int)
-    for tile in hand:
-        hand_tensor[tile] += 1
-
-    # Fixed melds: a kan of 1m (4 copies)
-    fixed_tensor = torch.zeros((4, 42), dtype=torch.int)
-    fixed_tensor[0, 0] = 4   # kan of 1m
-    # Other rows are zero
-
-    success, divisions = divide_from_tensors(hand_tensor, fixed_tensor)
-    print(f"Success: {success}")
-    print(f"Number of divisions: {len(divisions)}")
-    for i, div in enumerate(divisions):
-        print(f"Division {i+1}:")
-        for j, pack in enumerate(div):
-            print(f"  {j}: {pack_to_str(pack)}")

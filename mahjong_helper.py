@@ -84,5 +84,28 @@ def is_subsequently_called(gamestate: GameState, logline: int):
     if subsequent_line.sum() == 0:
         return False
     discarded_tile = torch.nonzero(line, as_tuple=True)[0][0].item()
-    called_tile = torch.nonzero(line, as_tuple=True)[0][0].item()
+    called_tile = torch.nonzero(subsequent_line, as_tuple=True)[0][0].item()
     return True if (subsequent_line.sum() == 4 or (subsequent_line.sum() == 5 and discarded_tile == called_tile)) else False
+
+
+def stack_to_tensor(lst: List[torch.Tensor]) -> torch.Tensor:
+    """
+    Convert a list of up to 4 torch.Tensors (each of length 42)
+    into a single torch.Tensor with 4 rows.
+    Pads with zeros if fewer than 4 tensors are provided.
+    
+    Parameters
+    ----------
+    lst : List[torch.Tensor]
+        A list of torch.Tensors, each of shape (42,).
+        Maximum length is 4.
+    
+    Returns
+    -------
+    torch.Tensor
+        A tensor of shape (4, 42).
+    """
+    pad_tensor = torch.zeros(42)
+    while len(lst) < 4:
+        lst.append(pad_tensor)
+    return torch.stack(lst)

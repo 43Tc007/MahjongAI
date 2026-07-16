@@ -209,8 +209,9 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit()
             exit()
-        if event.type == pygame.KEYDOWN:
-            game.step()
+    if not game.terminated:
+        time.sleep(0.1)
+        game.step()
             
     render_game_state(state)
     pygame.display.update()

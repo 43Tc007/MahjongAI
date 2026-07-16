@@ -125,9 +125,9 @@ def game_state_mask(game: GameState, player_idx: int) -> np.ndarray:
         game.log
     ])
 
-def is_subsequently_called(gamestate: GameState, logline: int):
-    line = gamestate.log[logline]
-    subsequent_line = gamestate.log[logline + 1]
+def is_subsequently_called(log: np.ndarray, logline: int):
+    line = log[logline]
+    subsequent_line = log[logline + 1]
     if subsequent_line.sum() == 0:
         return False
     # Convert np.nonzero to get first index of non‑zero element

@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 from typing import List, Optional, Tuple, cast
 from collections import Counter
 
@@ -137,11 +137,11 @@ def divide_win_hand(cnt_table: List[int],
 # ------------------------------------------------------------------
 # PyTorch wrapper – now handles kan as a special pung
 # ------------------------------------------------------------------
-def divide_from_tensors(hand_tensor: torch.Tensor,
-                        fixed_melds_tensor: List[torch.Tensor]) -> Tuple[bool, List[List[Tuple[int, int]]]]:
+def divide_from_tensors(hand_array: np.ndarray,
+                        fixed_melds_tensor: List[np.ndarray]) -> Tuple[bool, List[List[Tuple[int, int]]]]:
     """
     Parameters:
-        hand_tensor       : shape (42,) – counts of standing tiles (only indices 0..33 used).
+        hand_array       : shape (42,) – counts of standing tiles (only indices 0..33 used).
         fixed_melds_tensor: shape (4, 42) – each row is a count vector for a fixed meld.
                            A zero row is ignored.
                            Supported meld types:
@@ -151,8 +151,8 @@ def divide_from_tensors(hand_tensor: torch.Tensor,
     Returns:
         (success, divisions)
     """
-    # Standing hand count table (directly from the tensor)
-    cnt_table: List[int] = [int(x) for x in hand_tensor[:TILE_COUNT]]
+    # Standing hand count table (directly from the array)
+    cnt_table: List[int] = [int(x) for x in hand_array[:TILE_COUNT]]
 
     fixed_packs: List[Tuple[int, int]] = []
     for row in fixed_melds_tensor:
@@ -189,3 +189,4 @@ def divide_from_tensors(hand_tensor: torch.Tensor,
 
     # Call the core algorithm
     return divide_win_hand(cnt_table, fixed_packs)
+

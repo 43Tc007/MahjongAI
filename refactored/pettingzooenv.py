@@ -10,6 +10,9 @@ from refactored.mahjong_helper_2 import GameState, EAST, SOUTH, WEST, NORTH, gam
 from refactored.pygame_visualizer import render_game_state
 from typing import List
 from mahjong_helper_2 import *
+from hand_divisor_copy import divide_from_tensors
+from fan_calculator_copy import calculate_fan
+from copy import deepcopy
 
 class MahjongGameEnv(AECEnv):
     
@@ -49,7 +52,18 @@ class MahjongGameEnv(AECEnv):
         return spaces.Box(low=0, high=255, shape=(156, 46), dtype=np.uint8)
     
     def action_space(self, agent) -> gymnasium.Space:
-        return Discrete(74)
+        """
+        First 34 are discard of the 34 different tiles.
+        Another 34 for addkan / ankan
+        Then tile-2, tile-1 chow for the discard tile discarded by others
+            tile-1, tile+1 chow,
+            tile + 1, tile+2 chow
+            pon 
+            ming kan
+            ron / tsumo depending if the current player is the agent
+            pass
+        """
+        return Discrete(75)
     
     def render(self):
         """
@@ -72,7 +86,7 @@ class MahjongGameEnv(AECEnv):
         """
         return {
             'observation': game_state_mask(self.gamestate, self.agent_name_mapping[agent]),
-            'aciton_mask': self.action_mask
+            'action_mask': self.action_mask
         }
     
     def state(self):
@@ -108,7 +122,7 @@ class MahjongGameEnv(AECEnv):
             current_player=EAST,
             wall_remaining=144,
         )
-        self.action_mask: np.ndarray = np.zeros(74, dtype=np.uint8)
+        self.action_mask: np.ndarray = np.zeros(75, dtype=np.uint8)
         self.deal_hands()
     
     def deal_hands(self):
@@ -129,7 +143,130 @@ class MahjongGameEnv(AECEnv):
                 self.infos[agent]["reason"] = "initial_flower"
         self.gamestate.wall_remaining = len(self.gamestate.wall)
     
+    def generate_action_mask(self, player_idx: int, target_tile: int | None = None) -> np.ndarray:
+        action_mask = np.zeros(75, dtype=np.uint8)
+        action_mask[74] = 1
+        if self.gamestate.phase == WAIT_TSUMO_ADD_KAN_AN_KAN:
+            # ADD KAN / AN KAN
+            for tile in range(34):
+                if (self.gamestate.hands[player_idx][tile] == 1 and tile in self.gamestate.addkanable_tiles) or self.gamestate.hands[player_idx][tile] == 4: 
+                    action_mask[tile + 34] = 1
+            # TSUMO
+            assert target_tile is not None
+            fan = calculate_fan(self.gamestate, player_idx, target_tile)
+            if fan >= 3:
+                action_mask[73] = 1
+
+        elif self.gamestate.phase == DISCARD:
+            action_mask[:42] = (self.gamestate.hands[player_idx] != 0).astype(int)
+
+        elif self.gamestate.phase == WAIT_RESPONSE:
+            assert target_tile is not None
+            # chow
+            if ((self.gamestate.current_player - player_idx) % 4 == 3 and target_tile <= 26):
+
+                if (self.gamestate.hands[player_idx][target_tile - 2] >= 1 and 
+                    self.gamestate.hands[player_idx][target_tile - 1] >= 1 and 
+                    target_tile // 9 == (target_tile - 2) // 9 and
+                    target_tile // 9 == (target_tile - 1) // 9
+                ):
+                    action_mask[68] = 1
+
+                if (self.gamestate.hands[player_idx][target_tile - 1] >= 1 and 
+                    self.gamestate.hands[player_idx][target_tile + 1] >= 1 and 
+                    target_tile // 9 == (target_tile - 1) // 9 and
+                    target_tile // 9 == (target_tile + 1) // 9
+                ):
+                    action_mask[69] = 1
+
+                if (self.gamestate.hands[player_idx][target_tile + 1] >= 1 and 
+                    self.gamestate.hands[player_idx][target_tile + 2] >= 1 and 
+                    target_tile // 9 == (target_tile + 1) // 9 and
+                    target_tile // 9 == (target_tile + 2) // 9
+                ):
+                    action_mask[70] = 1
+            # pung
+            if self.gamestate.hands[player_idx][target_tile] >= 2:
+                action_mask[71] = 1
+            # ming kan
+            if self.gamestate.hands[player_idx][target_tile] >= 3:
+                action_mask[72] = 1
+            # ron
+            copy_gamestate = deepcopy(self.gamestate)
+            copy_gamestate.hands[player_idx][target_tile] += 1
+            if calculate_fan(copy_gamestate, player_idx, target_tile) >= 3:
+                action_mask[73] = 1
+        else:
+            assert target_tile is not None
+            if calculate_fan(self.gamestate, player_idx, target_tile) >= 3:
+                action_mask[73] = 1
+
+        return action_mask
+    
+    
+            
     def step(self, action) -> None:
-        pass
-    
-    
+        if self.gamestate.phase == WAIT_TSUMO_ADD_KAN_AN_KAN:
+            if 34 <= int(action) <= 67:
+                tile = int(action) - 34
+                if tile in self.gamestate.addkanable_tiles:
+                    execute_add_kan(self.gamestate, int(self.agent_selection), tile)
+                else:
+                    execute_an_kan(self.gamestate, int(self.agent_selection), tile)
+            elif int(action) == 73:
+                pass # ... terminate the shit
+            else:
+                assert int(action) == 74
+        elif self.gamestate.phase == DISCARD:
+            execute_discard(self.gamestate, int(self.agent_selection), int(action))
+        elif self.gamestate.phase == WAIT_RESPONSE: # phase is WAIT_RESPONSE
+            self.gamestate.action_array[int(action)] = self.agent_name_mapping[self.agent_selection]
+        else:
+            if int(action) == 73:
+                pass # terminate
+            else:
+                # np.nonzero(...) returns an array; select the first index and ensure int type for tile
+                idxs = np.nonzero(self.gamestate.hands[self.gamestate.current_player][34:])[0]
+                tile = int(34 + idxs[0])
+                execute_flower(self.gamestate, self.gamestate.current_player, tile=tile)
+
+        #  ... update until next decision has to be made
+        while not self.terminations[self.agent_selection]:
+            if self.gamestate.phase == WAIT_TSUMO_ADD_KAN_AN_KAN:
+                self.gamestate.phase = DISCARD
+                self.action_mask = self.generate_action_mask(self.agent_name_mapping[self.agent_selection])
+                break
+
+            if self.gamestate.phase == DISCARD:
+                self.gamestate.phase = WAIT_RESPONSE
+
+            if self.gamestate.phase == WAIT_RESPONSE:
+                self.agent_selection = self._agent_selector.next()
+                # phase end
+                if self.agent_name_mapping[self.agent_selection] == self.gamestate.current_player:
+                    # evaluates the action list, and do the action
+                    if self.gamestate.action_array[73]: # if tsumo, terminate
+                        # terminate and give reward
+                        pass
+                    elif self.gamestate.action_array[72]: 
+                        self.agent_selection = self.agents[self.gamestate.action_array[72]]
+                        self._agent_selector.reset()
+                        self.gamestate.current_player = self.agent_name_mapping[self.agent_selection]
+                        self.gamestate.phase = WAIT_HUA_HU
+                # see if the agent now has anything to do
+                pass
+
+            if self.gamestate.phase == WAIT_HUA_HU:
+                drawn_tile = draw_tile(self.gamestate, self.gamestate.current_player, self.gamestate.wall)
+                while is_flower(drawn_tile):
+                    self.gamestate.phase = WAIT_HUA_HU
+                    self.action_mask = self.generate_action_mask(self.gamestate.current_player, drawn_tile)
+                    if self.action_mask.sum() >= 2:
+                        break
+                    else:
+                        execute_flower(self.gamestate, self.agent_selection, drawn_tile)
+                        drawn_tile = draw_tile(self.gamestate, self.gamestate.current_player, self.gamestate.wall)
+                self.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
+                self.action_mask = self.generate_action_mask(self.gamestate.current_player, drawn_tile)
+                if self.action_mask.sum() >= 2:
+                    break

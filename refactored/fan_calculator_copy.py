@@ -155,9 +155,8 @@ def kan_kan_hu(game: GameState, player: int, division: List[Tuple[int, int]], wi
 
 def hua_hu(game: GameState, player: int, win_tile: int) -> int:
     if is_flower(win_tile):
-        return int((game.flowers[player].sum() == 7) * 3 + (game.flowers[player].sum() == 8)) * 13
+        return int((game.flowers[player].sum() == 6) * 3 + (game.flowers[player].sum() == 7)) * 13
     return 0
-
 
 def calculate_fan(
     game: GameState, player: int, win_tile: int) -> int:
@@ -169,8 +168,9 @@ def calculate_fan(
     
     success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
     # ---- Base fan (independent of the chosen meld division) ----
-    assert success
-
+    if not success:
+        return 0
+    
     base_fan = (
         flowers(game.flowers[player], player, game.game_wind) +
         jiu_zi_lian_huan(game.hands[player]) +

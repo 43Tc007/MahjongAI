@@ -44,14 +44,10 @@ WEST = 2
 NORTH = 3
 
 # DRAW HERE =  -1
-WAIT_TSUMO = 0
-WAIT_ADDKAN = 1
-WAIT_ANKAN = 2
-DISCARD = 3
-WAIT_RON = 4
-WAIT_KAN = 5
-WAIT_PUNG = 6
-WAIT_CHOW = 7
+WAIT_TSUMO_ADD_KAN_AN_KAN = 0
+DISCARD = 1
+WAIT_RESPONSE = 2
+WAIT_HUA_HU = 3
 
 MAX_LOG_ENTRIES = 128  
 
@@ -66,7 +62,7 @@ class GameState:
     game_wind: int
     current_player: int = EAST
     wall_remaining: int = 144
-    phase: int = WAIT_TSUMO
+    phase: int = WAIT_TSUMO_ADD_KAN_AN_KAN
 
     # Player-specific data – now using np.ndarray
     hands: List[np.ndarray] = field(default_factory=lambda: [np.zeros(42, dtype=np.uint8) for _ in range(4)])
@@ -81,6 +77,8 @@ class GameState:
     last_discard: int = -1
     addkanable_tiles: List[Dict[int, int]] = field(default_factory=lambda: [{}, {}, {}, {}])
     men_qian_qing: List[bool] = field(default_factory=lambda: [True for _ in range(4)])
+    action_array: np.ndarray  = field(default_factory=lambda: np.zeros(shape=(74,)))
+
 
     # Wall
     wall: List[int] = field(default_factory=_default_wall)
@@ -90,8 +88,6 @@ def melds_to_array(lst: List[np.ndarray]) -> np.ndarray:
     while len(lst) < 4:
         lst.append(pad_array)
     return np.stack(lst)
-
-
 
 def game_state_mask(game: GameState, player_idx: int) -> np.ndarray:
     # round wind, game wind, current player, wall remaining,
@@ -193,6 +189,19 @@ def draw_tile(gamestate: GameState, player_idx: int, wall: List[int]) -> int:
     return tile
 
 def discard(gamestate: GameState, player_idx: int, tile: int) -> None:
+    """
+    Affected:
+    hands, log, logline, last_discard
+    """
+    assert gamestate.hands[player_idx][tile] >= 1
+    gamestate.hands[player_idx][tile] -= 1
+    gamestate.last_discard = tile
+    gamestate.log[gamestate.logline][tile] += 1
+    gamestate.log[gamestate.logline][player_idx + 42] += 1
+    gamestate.logline += 1
+
+
+def execute_discard(gamestate: GameState, player_idx: int, tile: int) -> None:
     """
     Affected:
     hands, log, logline, last_discard
@@ -311,8 +320,3 @@ def execute_flower(gamestate: GameState, player_idx: int, tile: int) -> None:
     gamestate.log[gamestate.logline][42 + player_idx] += 1
     gamestate.logline += 1
 
-
-# Unit test
-if __name__ == '__main__':
-    state = GameState(EAST, EAST)
-    print(game_state_mask(state, 0).shape)

@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
+import random
 
 def is_flower(idx: int) -> bool:
     return idx >= 34
@@ -54,6 +55,11 @@ WAIT_CHOW = 7
 
 MAX_LOG_ENTRIES = 128  
 
+def _default_wall():
+    lst = list(range(34)) * 4 + list(range(34, 42))
+    random.shuffle(lst)
+    return lst
+
 @dataclass
 class GameState:
     round_wind: int
@@ -76,7 +82,9 @@ class GameState:
     addkanable_tiles: List[Dict[int, int]] = field(default_factory=lambda: [{}, {}, {}, {}])
     men_qian_qing: List[bool] = field(default_factory=lambda: [True for _ in range(4)])
 
-
+    # Wall
+    wall: List[int] = field(default_factory=_default_wall)
+    
 def melds_to_array(lst: List[np.ndarray]) -> np.ndarray:
     pad_array = np.zeros(42)
     while len(lst) < 4:
@@ -125,7 +133,45 @@ def game_state_mask(game: GameState, player_idx: int) -> np.ndarray:
         game.log
     ])
 
-def is_subsequently_called(log: np.ndarray, logline: int):
+def game_state_array(game: GameState) -> np.ndarray:
+    # round wind, game wind, current player, wall remaining,
+    metadata_array = np.zeros(shape=(4, 42 + 4), dtype=np.uint8)
+    metadata_array[0, game.round_wind] = 4
+    metadata_array[1, game.game_wind] = 4
+    metadata_array[2, game.current_player + 42] = 1
+    metadata_array[3, :] = game.wall_remaining
+
+    hands_array = np.hstack([melds_to_array(game.hands), np.identity(4)])
+
+    meld_player = np.array([
+        [1, 0, 0, 0],
+        [1, 0, 0, 0],
+        [1, 0, 0, 0],
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 1, 0, 0],
+        [0, 1, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 1, 0],
+        [0, 0, 1, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+        [0, 0, 0, 1],
+        [0, 0, 0, 1],
+        [0, 0, 0, 1],
+    ])
+    melds_array = np.hstack([np.vstack([melds_to_array(game.melds[i]) for i in range(4)]), meld_player])
+    flowers_array = np.hstack([np.stack(game.flowers), np.identity(4, dtype=np.uint8)])
+    return np.vstack([
+        metadata_array,
+        hands_array,
+        melds_array,
+        flowers_array,
+        game.log
+    ])
+
+def is_subsequently_called(log: np.ndarray, logline: int) -> bool:
     line = log[logline]
     subsequent_line = log[logline + 1]
     if subsequent_line.sum() == 0:
@@ -135,6 +181,136 @@ def is_subsequently_called(log: np.ndarray, logline: int):
     # FIXED: previously both used 'line', now 'subsequent_line' for the called tile
     called_tile = np.nonzero(subsequent_line)[0][0]
     return True if (subsequent_line.sum() == 4 or (subsequent_line.sum() == 5 and discarded_tile == called_tile)) else False
+
+def draw_tile(gamestate: GameState, player_idx: int, wall: List[int]) -> int:
+    """
+    Affected:
+    wall_remaining, wall, hands
+    """
+    tile = gamestate.wall.pop()
+    gamestate.hands[player_idx][tile] += 1
+    gamestate.wall_remaining = len(gamestate.wall)
+    return tile
+
+def discard(gamestate: GameState, player_idx: int, tile: int) -> None:
+    """
+    Affected:
+    hands, log, logline, last_discard
+    """
+    assert gamestate.hands[player_idx][tile] >= 1
+    gamestate.hands[player_idx][tile] -= 1
+    gamestate.last_discard = tile
+    gamestate.log[gamestate.logline][tile] += 1
+    gamestate.log[gamestate.logline][player_idx + 42] += 1
+    gamestate.logline += 1
+
+def execute_pon(gamestate: GameState, player_idx: int, tile: int) -> None:
+    """
+    Affected:
+    hands, melds, log, logline, addkanable_tiles, men_qian_qing
+    """
+    assert gamestate.hands[player_idx][tile] >= 2
+    gamestate.hands[player_idx][tile] -= 2
+    meld = np.zeros(42, dtype=np.uint8)
+    meld[tile] += 3
+    gamestate.melds[player_idx].append(meld)
+    gamestate.log[gamestate.logline][tile] += 3
+    gamestate.log[gamestate.logline][42 + player_idx] += 1
+    gamestate.logline += 1
+    gamestate.addkanable_tiles[player_idx][tile] = len(gamestate.melds[player_idx]) - 1
+    gamestate.men_qian_qing[player_idx] = False
+
+
+def execute_chow(gamestate: GameState, player_idx: int, tile: int, tiles_for_chow: List[int]) -> None:
+    """
+    Affected:
+    hands, melds, log, logline, men_qian_qing
+    """
+    assert len(tiles_for_chow) == 2
+    for chow_tile in tiles_for_chow:
+        assert gamestate.hands[player_idx][chow_tile] >= 1
+    assert gamestate.hands[player_idx][tile] >= 1
+
+    for chow_tile in tiles_for_chow:
+        gamestate.hands[player_idx][chow_tile] -= 1
+    gamestate.hands[player_idx][tile] -= 1
+
+    meld = np.zeros(42, dtype=np.uint8)
+    meld[tile] += 1
+    for chow_tile in tiles_for_chow:
+        meld[chow_tile] += 1
+
+    gamestate.melds[player_idx].append(meld)
+    for idx in [tile, *tiles_for_chow]:
+        gamestate.log[gamestate.logline][idx] += 1
+    gamestate.log[gamestate.logline][42 + player_idx] += 1
+    gamestate.logline += 1
+    gamestate.men_qian_qing[player_idx] = False
+
+
+def execute_ming_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
+    """
+    Affected:
+    hands, melds, log, logline, men_qian_qing
+    """
+    assert gamestate.hands[player_idx][tile] >= 3
+    for _ in range(3):
+        gamestate.hands[player_idx][tile] -= 1
+
+    meld = np.zeros(42, dtype=np.uint8)
+    meld[tile] += 4
+    gamestate.melds[player_idx].append(meld)
+    gamestate.log[gamestate.logline][tile] += 4
+    gamestate.log[gamestate.logline][42 + player_idx] += 1
+    gamestate.logline += 1
+    gamestate.men_qian_qing[player_idx] = False
+
+
+def execute_an_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
+    """
+    Affected:
+    hands, melds, log, logline
+    """
+    assert gamestate.hands[player_idx][tile] >= 4
+    for _ in range(4):
+        gamestate.hands[player_idx][tile] -= 1
+
+    meld = np.zeros(42, dtype=np.uint8)
+    meld[tile] += 4
+    gamestate.melds[player_idx].append(meld)
+    gamestate.log[gamestate.logline][tile] += 4
+    gamestate.log[gamestate.logline][42 + player_idx] += 1
+    gamestate.logline += 1
+
+
+
+def execute_add_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
+    """
+    Affected:
+    hands, melds, log, logline
+    """
+    assert gamestate.hands[player_idx][tile] >= 1
+    assert tile in gamestate.addkanable_tiles[player_idx]
+
+    gamestate.hands[player_idx][tile] -= 1
+    meld_index = gamestate.addkanable_tiles[player_idx][tile]
+    gamestate.melds[player_idx][meld_index][tile] += 1
+    gamestate.log[gamestate.logline][tile] += 1
+    gamestate.log[gamestate.logline][42 + player_idx] += 1
+    gamestate.logline += 1
+
+
+def execute_flower(gamestate: GameState, player_idx: int, tile: int) -> None:
+    """
+    Affected:
+    flowers, log, logline
+    """
+    assert is_flower(tile)
+    gamestate.flowers[player_idx][tile] += 1
+    gamestate.log[gamestate.logline][tile] += 1
+    gamestate.log[gamestate.logline][42 + player_idx] += 1
+    gamestate.logline += 1
+
 
 # Unit test
 if __name__ == '__main__':

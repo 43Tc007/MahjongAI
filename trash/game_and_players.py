@@ -266,8 +266,7 @@ class MahjongGame:
 
     def _deal_hands(self):
         for i in range(4):
-            tiles_to_deal = 13
-            for _ in range(tiles_to_deal):
+            for _ in range(13):
                 self._draw_card(i)
 
     def _draw_card(self, player_idx: int) -> int:

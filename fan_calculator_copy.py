@@ -1,56 +1,24 @@
-from hand_divisor import divide_from_tensors, CHOW, PUNG, PAIR
-from mahjong_helper import *
-import torch
+from hand_divisor_copy import divide_from_tensors, CHOW, PUNG, PAIR
+from mahjong_helper_2 import *
 from typing import List, Tuple
-
-"""
-無花 done
-正花 done
-門前清 done
-平胡 done
-翻牌 done
-搶杠 done
-杠上開花 done
-海底 done
-自摸 done
-花幺 done
-一臺花 done
-七只花 done
-對對胡 done
-混一色 done
-小三元 done
-清一色 done
-大三元 done
-天湖 done
-地湖 done
-四杠子 done
-坎坎胡 done
-杠上杠自摸
-大花胡 done
-字一色 done
-小四喜 done
-大四喜 done
-請幺 done
-十三幺 done
-九子連環 done
-"""
+import numpy as np
 
 # --- flowers ---
 
-def flowers(flowers: torch.Tensor, player: int, game_wind: int) -> int:
-    def wu_hua(flowers: torch.Tensor) -> int:
+def flowers(flowers: np.ndarray, player: int, game_wind: int) -> int:
+    def wu_hua(flowers: np.ndarray) -> int:
         return int((flowers[34:] == 0).all().item())
 
-    def red_zheng_hua(flowers: torch.Tensor, player: int, game_wind: int) -> int:
+    def red_zheng_hua(flowers: np.ndarray, player: int, game_wind: int) -> int:
         return int((flowers[34 + seat(player, game_wind)] == 1).item())
     
-    def black_zheng_hua(flowers: torch.Tensor, player: int, game_wind: int) -> int:
+    def black_zheng_hua(flowers: np.ndarray, player: int, game_wind: int) -> int:
         return int((flowers[38 + seat(player, game_wind)] == 1).item())
     
-    def red_yi_tai_hua(flowers: torch.Tensor) -> int:
+    def red_yi_tai_hua(flowers: np.ndarray) -> int:
         return int((flowers[34:37] == 1).all().item())
     
-    def black_yi_tai_hua(flowers:torch.Tensor) -> int:
+    def black_yi_tai_hua(flowers:np.ndarray) -> int:
         return int((flowers[38:41] == 1).all().item())
     
     return wu_hua(flowers) + red_zheng_hua(flowers, player, game_wind) + black_zheng_hua(flowers, player, game_wind) + red_yi_tai_hua(flowers) + black_yi_tai_hua(flowers)
@@ -134,7 +102,7 @@ def da_xiao_si_xi(division: List[Tuple[int, int]]) -> int:
         return 0
     return 13
 
-def jiu_zi_lian_huan(hand: torch.Tensor) -> int:
+def jiu_zi_lian_huan(hand: np.ndarray) -> int:
     if hand.sum() != 14:
         return 0
     for base in (0, 9, 18):
@@ -145,11 +113,11 @@ def jiu_zi_lian_huan(hand: torch.Tensor) -> int:
             return 13  # base is 0, 9, or 18, identifying the suit
     return 0
 
-def si_gang_zi(calls: torch.Tensor) -> int:
-    return 13 * int((calls.sum(dim=1) == 4).all().item())
+def si_gang_zi(calls: np.ndarray) -> int:
+    return 13 * int((calls.sum(axis=1) == 4).all().item())
 
-def shi_san_yao(hand: torch.Tensor) -> int:
-    indices = torch.tensor([
+def shi_san_yao(hand: np.ndarray) -> int:
+    indices = np.ndarray([
         0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33,
     ])
     return int((hand[indices] >= 1).all().item()) * 13
@@ -187,14 +155,11 @@ def kan_kan_hu(game: GameState, player: int, division: List[Tuple[int, int]], wi
 
 def hua_hu(game: GameState, player: int, win_tile: int) -> int:
     if is_flower(win_tile):
-        return int((game.flowers[player].sum() == 7) * 3 + (game.flowers[player].sum() == 8)) * 13
+        return int((game.flowers[player].sum() == 6) * 3 + (game.flowers[player].sum() == 7)) * 13
     return 0
-
 
 def calculate_fan(
     game: GameState, player: int, win_tile: int) -> int:
-
-
 
     if hua_hu(game, player, win_tile):
         return hua_hu(game, player, win_tile)
@@ -203,12 +168,13 @@ def calculate_fan(
     
     success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
     # ---- Base fan (independent of the chosen meld division) ----
-    assert success
-
+    if not success:
+        return 0
+    
     base_fan = (
         flowers(game.flowers[player], player, game.game_wind) +
         jiu_zi_lian_huan(game.hands[player]) +
-        si_gang_zi(stack_to_tensor(game.melds[player])) +
+        si_gang_zi(melds_to_array(game.melds[player])) +
         shi_san_yao(game.hands[player]) +
         tsumo(game, player) +
         tian_hu(game, player) +

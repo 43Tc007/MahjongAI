@@ -6,8 +6,8 @@ from pettingzoo import AECEnv
 from pettingzoo.utils import AgentSelector
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
-from refactored.mahjong_helper_2 import GameState, EAST, SOUTH, WEST, NORTH, game_state_mask, game_state_array
-from refactored.pygame_visualizer import render_game_state
+from mahjong_helper_2 import GameState, EAST, SOUTH, WEST, NORTH, game_state_mask, game_state_array
+from pygame_visualizer import render_game_state
 from typing import List
 from mahjong_helper_2 import *
 from hand_divisor_copy import divide_from_tensors

@@ -75,9 +75,10 @@ class GameState:
 
     # Convenience:
     last_discard: int = -1
+    last_drawn: int = -1
     addkanable_tiles: List[Dict[int, int]] = field(default_factory=lambda: [{}, {}, {}, {}])
     men_qian_qing: List[bool] = field(default_factory=lambda: [True for _ in range(4)])
-    action_array: np.ndarray  = field(default_factory=lambda: np.zeros(shape=(74,)))
+    action_array: np.ndarray  = field(default_factory=lambda: np.zeros(shape=(75,)))
 
 
     # Wall
@@ -186,6 +187,7 @@ def draw_tile(gamestate: GameState, player_idx: int, wall: List[int]) -> int:
     tile = gamestate.wall.pop()
     gamestate.hands[player_idx][tile] += 1
     gamestate.wall_remaining = len(gamestate.wall)
+    gamestate.last_drawn = tile
     return tile
 
 def discard(gamestate: GameState, player_idx: int, tile: int) -> None:

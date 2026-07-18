@@ -203,6 +203,51 @@ class MahjongGameEnv(AECEnv):
 
         return action_mask
     
+    def terminate_game(self, target_tile: int = -1, winnning_player_idx: int = -1, losing_player_idx: int = -1, terminate_type="exhausted"):
+        payout = {
+            3 : 1,
+            4 : 2,
+            5 : 3,
+            6 : 4,
+            7 : 6,
+            8 : 8,
+            9 : 12,
+            10 : 16,
+            11 : 24,
+            12 : 32,
+            13 : 48
+        }
+
+        if terminate_type == "tsumo":
+            fan = calculate_fan(self.gamestate, winnning_player_idx, target_tile)
+            winner = self.agents[winnning_player_idx]
+            for agent in self.agents:
+                self.terminations[agent] = True
+                if agent == winner:
+                    self.rewards[agent] = payout[fan] * 1.5
+                else:
+                    self.rewards[agent] = - payout[fan] * 0.5
+            self.infos[winner] = {'win_type': 'tsumo', 'fan': fan}
+        elif terminate_type == "ron":
+            fan = calculate_fan(self.gamestate, winnning_player_idx, target_tile)
+            winner = self.agents[winnning_player_idx]
+            loser = self.agents[losing_player_idx]
+            for agent in self.agents:
+                self.terminations[agent] = True
+                if agent == winner:
+                    self.rewards[agent] = payout[fan] 
+                elif agent == loser:
+                    self.rewards[agent] = - payout[fan] 
+                else:
+                    self.rewards[agent] = 0
+            self.infos[winner] = {'win_type': 'ron', 'fan': fan}
+        elif terminate_type == "exhausted":
+            for agent in self.agents:
+                self.terminations[agent] = True
+                self.rewards = {agent: 0 for agent in self.agents}
+                self.infos[agent] = {'win_type': 'draw', 'fan': 0}   
+        return  # exit step, episode ends
+    
     
             
     def step(self, action) -> None:
@@ -214,7 +259,7 @@ class MahjongGameEnv(AECEnv):
                 else:
                     execute_an_kan(self.gamestate, int(self.agent_selection), tile)
             elif int(action) == 73:
-                pass # ... terminate the shit
+                self.terminate_game(target_tile=self.gamestate.last_drawn, winnning_player_idx=self.gamestate.current_player, terminate_type="tsumo")
             else:
                 assert int(action) == 74
         elif self.gamestate.phase == DISCARD:
@@ -223,9 +268,8 @@ class MahjongGameEnv(AECEnv):
             self.gamestate.action_array[int(action)] = self.agent_name_mapping[self.agent_selection]
         else:
             if int(action) == 73:
-                pass # terminate
+                self.terminate_game(target_tile=self.gamestate.last_drawn, winnning_player_idx=self.gamestate.current_player, terminate_type="tsumo")
             else:
-                # np.nonzero(...) returns an array; select the first index and ensure int type for tile
                 idxs = np.nonzero(self.gamestate.hands[self.gamestate.current_player][34:])[0]
                 tile = int(34 + idxs[0])
                 execute_flower(self.gamestate, self.gamestate.current_player, tile=tile)
@@ -239,24 +283,58 @@ class MahjongGameEnv(AECEnv):
 
             if self.gamestate.phase == DISCARD:
                 self.gamestate.phase = WAIT_RESPONSE
+                self.gamestate.action_array = np.zeros(shape=(75,))
 
             if self.gamestate.phase == WAIT_RESPONSE:
                 self.agent_selection = self._agent_selector.next()
                 # phase end
                 if self.agent_name_mapping[self.agent_selection] == self.gamestate.current_player:
                     # evaluates the action list, and do the action
-                    if self.gamestate.action_array[73]: # if tsumo, terminate
-                        # terminate and give reward
-                        pass
+                    if self.gamestate.action_array[73]: # if ron, terminate
+                        self.terminate_game(self.gamestate.last_discard, self.gamestate.action_array[72], self.gamestate.current_player, terminate_type="ron")
+                        break
+                    elif self.gamestate.wall_remaining == 0:
+                        self.terminate_game(terminate_type="exhausted")
+                        break
                     elif self.gamestate.action_array[72]: 
+                        execute_ming_kan(self.gamestate, self.agent_name_mapping[self.gamestate.action_array[72]], self.gamestate.last_discard)
                         self.agent_selection = self.agents[self.gamestate.action_array[72]]
                         self._agent_selector.reset()
                         self.gamestate.current_player = self.agent_name_mapping[self.agent_selection]
                         self.gamestate.phase = WAIT_HUA_HU
-                # see if the agent now has anything to do
-                pass
+                    elif self.gamestate.action_array[71]:
+                        execute_pon(self.gamestate, self.agent_name_mapping[self.gamestate.action_array[71]], self.gamestate.last_discard)
+                        self.agent_selection = self.agents[self.gamestate.action_array[71]]
+                        self._agent_selector.reset()
+                        self.gamestate.current_player = self.agent_name_mapping[self.agent_selection]
+                        self.gamestate.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
+                    elif self.gamestate.action_array[70]:
+                        execute_chow(self.gamestate, self.agent_name_mapping[self.gamestate.action_array[70]], self.gamestate.last_discard, [self.gamestate.last_discard-2, self.gamestate.last_discard-1])
+                        self.agent_selection = self.agents[self.gamestate.action_array[70]]
+                        self._agent_selector.reset()
+                        self.gamestate.current_player = self.agent_name_mapping[self.agent_selection]
+                        self.gamestate.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
+                    elif self.gamestate.action_array[69]:
+                        execute_chow(self.gamestate, self.agent_name_mapping[self.gamestate.action_array[69]], self.gamestate.last_discard, [self.gamestate.last_discard-1, self.gamestate.last_discard+1])
+                        self.agent_selection = self.agents[self.gamestate.action_array[69]]
+                        self._agent_selector.reset()
+                        self.gamestate.current_player = self.agent_name_mapping[self.agent_selection]
+                        self.gamestate.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
+                    elif self.gamestate.action_array[68]:
+                        execute_chow(self.gamestate, self.agent_name_mapping[self.gamestate.action_array[68]], self.gamestate.last_discard, [self.gamestate.last_discard+1, self.gamestate.last_discard+2])
+                        self.agent_selection = self.agents[self.gamestate.action_array[68]]
+                        self._agent_selector.reset()
+                        self.gamestate.current_player = self.agent_name_mapping[self.agent_selection]
+                        self.gamestate.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
+                else:
+                    self.action_mask = self.generate_action_mask(self.agent_name_mapping[self.agent_selection], self.gamestate.last_discard)
+                    if self.action_mask.sum() >= 2:
+                        break
 
             if self.gamestate.phase == WAIT_HUA_HU:
+                if self.gamestate.wall_remaining == 0:
+                    self.terminate_game(terminate_type="exhausted")
+                    break
                 drawn_tile = draw_tile(self.gamestate, self.gamestate.current_player, self.gamestate.wall)
                 while is_flower(drawn_tile):
                     self.gamestate.phase = WAIT_HUA_HU
@@ -265,8 +343,11 @@ class MahjongGameEnv(AECEnv):
                         break
                     else:
                         execute_flower(self.gamestate, self.agent_selection, drawn_tile)
+                        if self.gamestate.wall_remaining == 0:
+                            self.terminate_game(terminate_type="exhausted")
+                            break
                         drawn_tile = draw_tile(self.gamestate, self.gamestate.current_player, self.gamestate.wall)
-                self.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
+                self.gamestate.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
                 self.action_mask = self.generate_action_mask(self.gamestate.current_player, drawn_tile)
                 if self.action_mask.sum() >= 2:
                     break

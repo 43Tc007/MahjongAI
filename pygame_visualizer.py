@@ -96,10 +96,14 @@ def discard_to_surf_rect(log: np.ndarray, font: pygame.font.Font):
     discards: List[List[str]] = [[] for _ in range(4)]
     line_number = 0
     while log[line_number].sum() > 0:
-        if log[line_number].sum() == 2 and not is_subsequently_called(log, line_number):
-            temp = np.nonzero(log[line_number])
-            tile, player_idx = int(temp[0].item()), int((temp[1] - 42).item())
-            discards[player_idx].append(tiles_unicode[tile])
+        if log[line_number].sum() == 2 and not is_subsequently_called(log, line_number) and log[line_number][:34].sum() == 1:
+            idxs = np.nonzero(log[line_number])[0]
+            if idxs.size >= 2:
+                tile = int(idxs[0])
+                player_idx = int(idxs[1]) - 42
+                # guard: ensure valid player index
+                if 0 <= player_idx < 4:
+                    discards[player_idx].append(tiles_unicode[tile])
         line_number += 1
     discard_strings: List[str] = ["".join(discards[i]) for i in range(4)]
 

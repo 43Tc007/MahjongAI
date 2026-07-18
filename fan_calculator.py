@@ -3,7 +3,6 @@ from mahjong_helper import *
 from typing import List, Tuple
 import numpy as np
 
-# --- flowers ---
 
 def flowers(flowers: np.ndarray, player: int, game_wind: int) -> int:
     def wu_hua(flowers: np.ndarray) -> int:
@@ -26,23 +25,23 @@ def flowers(flowers: np.ndarray, player: int, game_wind: int) -> int:
 # --- main hand ---
 
 def ping_hu(division: List[Tuple[int, int]]) -> int:
-    for pack in division:
-        if pack[0] == PUNG:
+    for pack_type, tile in division:
+        if pack_type == PUNG:
             return 0
     return 1
 
 def dui_dui_hu(division: List[Tuple[int, int]]) -> int:
-    for pack in division:
-        if pack[1] == CHOW:
+    for pack_type, tile in division:
+        if pack_type == CHOW:
             return 0
-    return True
+    return 1
 
 def fan_pai(division: List[Tuple[int, int]], player: int, round_wind: int, game_wind: int) -> int:
     res = 0
     seat_wind = seat(player, game_wind)
     targets = [seat_wind + 27, round_wind + 27, 31, 32, 33]
-    for pack in division:
-        if pack[1] in targets:
+    for pack_type, tile in division:
+        if tile in targets and pack_type == PUNG:
             res += 1
     return res
 
@@ -117,9 +116,7 @@ def si_gang_zi(calls: np.ndarray) -> int:
     return 13 * int((calls.sum(axis=1) == 4).all().item())
 
 def shi_san_yao(hand: np.ndarray) -> int:
-    indices = np.ndarray([
-        0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33,
-    ])
+    indices = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]
     return int((hand[indices] >= 1).all().item()) * 13
 
 def tsumo(game: GameState, player: int) -> int:
@@ -155,51 +152,162 @@ def kan_kan_hu(game: GameState, player: int, division: List[Tuple[int, int]], wi
 
 def hua_hu(game: GameState, player: int, win_tile: int) -> int:
     if is_flower(win_tile):
-        return int((game.flowers[player].sum() == 6) * 3 + (game.flowers[player].sum() == 7)) * 13
+        return int((game.flowers[player].sum() == 6) * 3 + (game.flowers[player].sum() == 7) * 13)
     return 0
 
 def calculate_fan(
-    game: GameState, player: int, win_tile: int) -> int:
 
+
+    game: GameState, player: int, win_tile: int, verbose: bool =False) -> int:
+
+    # Special hands that immediately return (they override everything else)
     if hua_hu(game, player, win_tile):
+        print("hua_hu:", hua_hu(game, player, win_tile))
         return hua_hu(game, player, win_tile)
     if shi_san_yao(game.hands[player]):
+        print("shi_san_yao:", shi_san_yao(game.hands[player]))
         return 13
-    
-    success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
-    # ---- Base fan (independent of the chosen meld division) ----
-    if not success:
-        return 0
-    
-    base_fan = (
-        flowers(game.flowers[player], player, game.game_wind) +
-        jiu_zi_lian_huan(game.hands[player]) +
-        si_gang_zi(melds_to_array(game.melds[player])) +
-        shi_san_yao(game.hands[player]) +
-        tsumo(game, player) +
-        tian_hu(game, player) +
-        di_hu(game, player) +
-        men_qian_qing(game, player) +
-        hai_di_lao_yue(game) +
-        qiang_gang(game, player) +
-        gang_shang_kai_hua(game, player) 
-    )
 
+    success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
+    if not success or len(divisions) == 0:
+        return 0
+
+    # ---- Compute base yaku (independent of division) ----
+    yaku = {}
+
+    # Flower related yaku (we'll combine them, but you can break down further)
+    flower_val = flowers(game.flowers[player], player, game.game_wind)
+    if flower_val:
+        yaku["flowers (combined)"] = flower_val
+
+    val = jiu_zi_lian_huan(game.hands[player])
+    if val:
+        yaku["jiu_zi_lian_huan"] = val
+
+    val = si_gang_zi(melds_to_array(game.melds[player]))
+    if val:
+        yaku["si_gang_zi"] = val
+
+    val = tsumo(game, player)
+    if val:
+        yaku["tsumo"] = val
+
+    val = tian_hu(game, player)
+    if val:
+        yaku["tian_hu"] = val
+
+    val = di_hu(game, player)
+    if val:
+        yaku["di_hu"] = val
+
+    val = men_qian_qing(game, player)
+    if val:
+        yaku["men_qian_qing"] = val
+
+    val = hai_di_lao_yue(game)
+    if val:
+        yaku["hai_di_lao_yue"] = val
+
+    val = qiang_gang(game, player)
+    if val:
+        yaku["qiang_gang"] = val
+
+    val = gang_shang_kai_hua(game, player)
+    if val:
+        yaku["gang_shang_kai_hua"] = val
+
+    # ---- Division-dependent yaku ----
     max_fan = 0
+    best_yaku = {}
     for division in divisions:
-        temp_fan = (base_fan + 
-            ping_hu(division) + 
-            dui_dui_hu(division) + 
-            fan_pai(division, player, game.round_wind, game.game_wind) + 
-            hua_yao(division) + 
-            qing_yao(division) + 
-            da_xiao_san_yuan(division) + 
-            qing_hun_yi_se(division) + 
-            zi_yi_se(division) + 
-            da_xiao_si_xi(division) + 
-            kan_kan_hu(game, player, division, win_tile)
-        )
+        div_yaku = {}
+
+        # Evaluate each division‑dependent yaku
+        val = ping_hu(division)
+        if val:
+            div_yaku["ping_hu"] = val
+
+        val = dui_dui_hu(division)
+        if val:
+            div_yaku["dui_dui_hu"] = val
+
+        val = fan_pai(division, player, game.round_wind, game.game_wind)
+        if val:
+            div_yaku["fan_pai"] = val
+
+        val = hua_yao(division)
+        if val:
+            div_yaku["hua_yao"] = val
+
+        val = qing_yao(division)
+        if val:
+            div_yaku["qing_yao"] = val
+
+        val = da_xiao_san_yuan(division)
+        if val:
+            div_yaku["da_xiao_san_yuan"] = val
+
+        val = qing_hun_yi_se(division)
+        if val:
+            div_yaku["qing_hun_yi_se"] = val
+
+        val = zi_yi_se(division)
+        if val:
+            div_yaku["zi_yi_se"] = val
+
+        val = da_xiao_si_xi(division)
+        if val:
+            div_yaku["da_xiao_si_xi"] = val
+
+        val = kan_kan_hu(game, player, division, win_tile)
+        if val:
+            div_yaku["kan_kan_hu"] = val
+
+        # Total fan for this division (base + div)
+        temp_fan = sum(yaku.values()) + sum(div_yaku.values())
         if temp_fan > max_fan:
             max_fan = temp_fan
+            best_yaku = {**yaku, **div_yaku}   # merge dictionaries
 
-    return max(13, max_fan)
+    # ---- Print the positive yaku for the chosen division ----
+    if best_yaku:
+        if verbose:
+            print("Yaku counted (with values):")
+            for name, value in best_yaku.items():
+                print(f"  {name}: {value}")
+    else:
+        if verbose:
+            print("No yaku (only 0‑fan hands).")
+
+    return min(13, max_fan)
+
+
+
+if __name__ == '__main__':
+    gamestate = GameState(
+        round_wind=EAST,
+        game_wind=SOUTH,
+        current_player=WEST,
+        wall_remaining=120,
+        phase=WAIT_TSUMO_ADD_KAN_AN_KAN,
+    )
+
+    # Fill in some arbitrary values
+    temp = np.array([
+        0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 8
+    ])
+    for thing in temp:
+        gamestate.hands[0][thing] += 1
+    gamestate.hands[1][10] = 1  # Player 1 has one tile index 10
+    gamestate.flowers[2][40] = 1
+    gamestate.melds[3] = [np.array([1,2,3], dtype=np.uint8)]
+    gamestate.last_discard = 7
+    gamestate.last_drawn = 12
+    gamestate.addkanable_tiles[0] = {7: 1}
+    gamestate.men_qian_qing = [False, False, False, False]
+    gamestate.action_array[0] = 1
+    gamestate.wall = list(range(100))  # shorter wall for demo
+    gamestate.logline = 5
+    gamestate.log[gamestate.logline] = np.ones(46, dtype=np.uint8)
+    x = calculate_fan(gamestate, 0, gamestate.last_discard, verbose=True)
+    print(x)

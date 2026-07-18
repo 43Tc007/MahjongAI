@@ -86,9 +86,9 @@ class GameState:
     
 def melds_to_array(lst: List[np.ndarray]) -> np.ndarray:
     pad_array = np.zeros(42)
-    while len(lst) < 4:
-        lst.append(pad_array)
-    return np.stack(lst)
+    n = len(lst)
+    pads = [pad_array for _ in range(4 - n)]
+    return np.stack([*lst, *pads]) if n < 4 else np.stack(lst)
 
 def game_state_mask(game: GameState, player_idx: int) -> np.ndarray:
     # round wind, game wind, current player, wall remaining,
@@ -107,18 +107,21 @@ def game_state_mask(game: GameState, player_idx: int) -> np.ndarray:
         [1, 0, 0, 0],
         [1, 0, 0, 0],
         [1, 0, 0, 0],
+
         [0, 1, 0, 0],
         [0, 1, 0, 0],
         [0, 1, 0, 0],
         [0, 1, 0, 0],
+
         [0, 0, 1, 0],
         [0, 0, 1, 0],
         [0, 0, 1, 0],
         [0, 0, 1, 0],
+
         [0, 0, 0, 1],
         [0, 0, 0, 1],
         [0, 0, 0, 1],
-        [0, 0, 0, 1],
+        [0, 0, 0, 1]
     ])
     melds_array = np.hstack([np.vstack([melds_to_array(game.melds[i]) for i in range(4)]), meld_player])
     flowers_array = np.hstack([np.stack(game.flowers), np.identity(4, dtype=np.uint8)])
@@ -220,6 +223,7 @@ def execute_pon(gamestate: GameState, player_idx: int, tile: int) -> None:
     Affected:
     hands, melds, log, logline, addkanable_tiles, men_qian_qing
     """
+    assert len(gamestate.melds[player_idx]) < 4
     assert gamestate.hands[player_idx][tile] >= 2
     gamestate.hands[player_idx][tile] -= 2
     meld = np.zeros(42, dtype=np.uint8)
@@ -237,14 +241,14 @@ def execute_chow(gamestate: GameState, player_idx: int, tile: int, tiles_for_cho
     Affected:
     hands, melds, log, logline, men_qian_qing
     """
+    assert len(gamestate.melds[player_idx]) < 4
     assert len(tiles_for_chow) == 2
     for chow_tile in tiles_for_chow:
         assert gamestate.hands[player_idx][chow_tile] >= 1
-    assert gamestate.hands[player_idx][tile] >= 1
 
     for chow_tile in tiles_for_chow:
         gamestate.hands[player_idx][chow_tile] -= 1
-    gamestate.hands[player_idx][tile] -= 1
+
 
     meld = np.zeros(42, dtype=np.uint8)
     meld[tile] += 1
@@ -264,6 +268,7 @@ def execute_ming_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
     Affected:
     hands, melds, log, logline, men_qian_qing
     """
+    assert len(gamestate.melds[player_idx]) < 4
     assert gamestate.hands[player_idx][tile] >= 3
     for _ in range(3):
         gamestate.hands[player_idx][tile] -= 1
@@ -283,6 +288,7 @@ def execute_an_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
     hands, melds, log, logline
     """
     assert gamestate.hands[player_idx][tile] >= 4
+    assert len(gamestate.melds[player_idx]) < 4
     for _ in range(4):
         gamestate.hands[player_idx][tile] -= 1
 
@@ -314,9 +320,10 @@ def execute_add_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
 def execute_flower(gamestate: GameState, player_idx: int, tile: int) -> None:
     """
     Affected:
-    flowers, log, logline
+    hands, flowers, log, logline
     """
     assert is_flower(tile)
+    gamestate.hands[player_idx][tile] -= 1
     gamestate.flowers[player_idx][tile] += 1
     gamestate.log[gamestate.logline][tile] += 1
     gamestate.log[gamestate.logline][42 + player_idx] += 1

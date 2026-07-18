@@ -1,4 +1,4 @@
-from mahjong_helper_2 import GameState, is_subsequently_called
+from mahjong_helper import GameState, is_subsequently_called
 import pygame
 import numpy as np
 from typing import List, Tuple

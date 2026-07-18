@@ -1,5 +1,5 @@
-from hand_divisor_copy import divide_from_tensors, CHOW, PUNG, PAIR
-from mahjong_helper_2 import *
+from hand_divisor import divide_from_tensors, CHOW, PUNG, PAIR
+from mahjong_helper import *
 from typing import List, Tuple
 import numpy as np
 

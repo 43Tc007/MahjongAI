@@ -145,6 +145,8 @@ def gang_shang_kai_hua(game: GameState, player: int) -> int:
     return (game.log[game.logline, :42].sum().item() == 4 and game.current_player == player) * 1
 
 def kan_kan_hu(game: GameState, player: int, division: List[Tuple[int, int]], win_tile: int) -> int:
+    if not dui_dui_hu(division):
+        return 0
     if tsumo(game, player):
         return men_qian_qing(game, player) * 13
     pair_tile: int = [tile for pack_type, tile in division if pack_type == PAIR][0]
@@ -172,6 +174,7 @@ def calculate_fan(
     if not success or len(divisions) == 0:
         return 0
 
+     
     # ---- Compute base yaku (independent of division) ----
     yaku = {}
 

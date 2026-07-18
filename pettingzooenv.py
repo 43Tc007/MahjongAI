@@ -1,16 +1,17 @@
 import gymnasium
 import numpy as np
-import pygame
+import numpy.typing as npt
+
 from gymnasium import spaces
 from pettingzoo import AECEnv
 from pettingzoo.utils import AgentSelector
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
 from mahjong_helper import GameState, EAST, SOUTH, WEST, NORTH, game_state_mask, game_state_array
-from pygame_visualizer import render_game_state
+
 from typing import List
 from mahjong_helper import *
-from hand_divisor import divide_from_tensors
+
 from fan_calculator import calculate_fan
 from copy import deepcopy
 
@@ -30,14 +31,9 @@ class MahjongGameEnv(AECEnv):
             current_player=EAST,
             wall_remaining=144,
         )
-        if render_mode == "human":
-            pygame.init()
-            self.screen = pygame.display.set_mode((800, 800))
-            pygame.display.set_caption("Mahjong Environment")
-            self.font = pygame.font.Font("C:/Windows/Fonts/seguisym.ttf", 48)
 
     def observation_space(self, agent) -> gymnasium.Space:
-        return spaces.Box(low=0, high=255, shape=(156, 46), dtype=np.uint8)
+        return spaces.Dict({'observation': spaces.Box(low=0, high=255, shape=(156, 46), dtype=np.uint8), 'action_mask': spaces.Box(low=0, high=1, shape=(75,), dtype=np.uint8)})
     
     def action_space(self, agent) -> gymnasium.Space:
         return Discrete(75)
@@ -49,20 +45,19 @@ class MahjongGameEnv(AECEnv):
             )
             return None
         elif self.render_mode == "human":
-            render_game_state(state=self.gamestate, screen=self.screen, font=self.font)
+            pass
 
     def observe(self, agent):
         return {
             'observation': game_state_mask(self.gamestate, self.agent_name_mapping[agent]),
-            'action_mask': self.action_mask
+            'action_mask': self.mask
         }
     
     def state(self):
-        return game_state_array(self.gamestate)
+        return np.vstack([game_state_array(self.gamestate), wall_sequence_array(self.gamestate.wall)])
     
     def close(self):
-        if pygame.get_init():
-            pygame.quit()
+        pass
 
     def reset(self, seed: int | None = None, options: dict | None = None) -> None:
         if seed is not None:
@@ -73,9 +68,6 @@ class MahjongGameEnv(AECEnv):
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
-        if not pygame.get_init():
-            pygame.init()
-
         self._agent_selector = AgentSelector(self.agents)
         self.agent_selection = self._agent_selector.next()
         self.gamestate = GameState(
@@ -84,10 +76,10 @@ class MahjongGameEnv(AECEnv):
             current_player=EAST,
             wall_remaining=144,
         )
-        self.action_mask: np.ndarray = np.zeros(75, dtype=np.uint8)
+        self.mask: npt.NDArray[np.uint8] = np.zeros(75, dtype=np.uint8)
         self.deal_hands()
         drawn_tile = draw_tile(self.gamestate, 0, self.gamestate.wall)
-        self.action_mask = self.generate_action_mask(EAST, drawn_tile)
+        self.mask = self.generate_action_mask(EAST, drawn_tile)
     
     def deal_hands(self):
         for player_idx in range(4):
@@ -163,7 +155,7 @@ class MahjongGameEnv(AECEnv):
                 action_mask[73] = 1
 
         # Store for later use
-        self.action_mask = action_mask
+        self.mask = action_mask
         return action_mask
     
     def terminate_game(self, target_tile: int = -1, winnning_player_idx: int = -1, losing_player_idx: int = -1, terminate_type="exhausted"):
@@ -232,6 +224,7 @@ class MahjongGameEnv(AECEnv):
                 assert int(action) == 74
         elif self.gamestate.phase == DISCARD:
             execute_discard(self.gamestate, player_idx, int(action))
+            assert self.gamestate.hands[self.gamestate.current_player].sum() % 3 == 1
         elif self.gamestate.phase == WAIT_RESPONSE:
             self.gamestate.action_array[int(action)] = player_idx
         else:
@@ -254,7 +247,7 @@ class MahjongGameEnv(AECEnv):
             # Phase: WAIT_TSUMO_ADD_KAN_AN_KAN -> DISCARD
             if self.gamestate.phase == WAIT_TSUMO_ADD_KAN_AN_KAN:
                 self.gamestate.phase = DISCARD
-                self.action_mask = self.generate_action_mask(self.agent_name_mapping[self.agent_selection])
+                self.mask = self.generate_action_mask(self.agent_name_mapping[self.agent_selection])
                 break
 
             # Phase: DISCARD -> WAIT_RESPONSE
@@ -314,8 +307,8 @@ class MahjongGameEnv(AECEnv):
                         self.gamestate.phase = WAIT_HUA_HU
                 else:
                     # Not current player; generate mask for this agent
-                    self.action_mask = self.generate_action_mask(self.agent_name_mapping[self.agent_selection], self.gamestate.last_discard)
-                    if self.action_mask.sum() >= 2:
+                    self.mask = self.generate_action_mask(self.agent_name_mapping[self.agent_selection], self.gamestate.last_discard)
+                    if self.mask.sum() >= 2:
                         break
                     else:
                         # Auto-pass: set action_array[74] = player_idx
@@ -330,8 +323,8 @@ class MahjongGameEnv(AECEnv):
                 drawn_tile = draw_tile(self.gamestate, self.gamestate.current_player, self.gamestate.wall)
                 # Check flowers
                 while is_flower(drawn_tile):
-                    self.action_mask = self.generate_action_mask(self.gamestate.current_player, drawn_tile)
-                    if self.action_mask.sum() >= 2:  # tsumo available
+                    self.mask = self.generate_action_mask(self.gamestate.current_player, drawn_tile)
+                    if self.mask.sum() >= 2:  # tsumo available
                         break
                     else:
                         execute_flower(self.gamestate, self.agent_name_mapping[self.agent_selection], drawn_tile)
@@ -340,15 +333,15 @@ class MahjongGameEnv(AECEnv):
                             break
                         drawn_tile = draw_tile(self.gamestate, self.gamestate.current_player, self.gamestate.wall)
                 # After flower handling, check if we broke due to tsumo possibility
-                if self.action_mask.sum() >= 2:
+                if self.mask.sum() >= 2:
                     pass
                 # If no tsumo and no flowers, transition to WAIT_TSUMO_ADD_KAN_AN_KAN
                 if self.gamestate.phase == WAIT_HUA_HU:
                     self.gamestate.phase = WAIT_TSUMO_ADD_KAN_AN_KAN
-                    self.action_mask = self.generate_action_mask(self.gamestate.current_player, drawn_tile)
-                    if self.action_mask.sum() >= 2:
+                    self.mask = self.generate_action_mask(self.gamestate.current_player, drawn_tile)
+                    if self.mask.sum() >= 2:
                         break
                     else:
                         self.gamestate.phase = DISCARD
-                        self.action_mask = self.generate_action_mask(self.gamestate.current_player)
+                        self.mask = self.generate_action_mask(self.gamestate.current_player)
                         break

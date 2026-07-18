@@ -1,8 +1,8 @@
 import numpy as np
-from pettingzooenv import MahjongGameEnv, render_game_state
+from pettingzooenv import MahjongGameEnv
 import time
 import pygame
-from pygame_visualizer import array_to_tile_string, melds_to_string, tiles_unicode
+from pygame_visualizer import array_to_tile_string, melds_to_string, tiles_unicode, render_game_state
 
 pygame.init()
 screen = pygame.display.set_mode(size=(800, 800))

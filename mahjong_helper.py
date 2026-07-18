@@ -299,7 +299,21 @@ def execute_an_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
     gamestate.log[gamestate.logline][42 + player_idx] += 1
     gamestate.logline += 1
 
-
+def wall_sequence_array(wall: List[int], max_len: int = 92) -> np.ndarray:
+    """
+    Convert the remaining wall (list) into a fixed‑length one‑hot sequence.
+    The sequence is in **reverse order**:
+      - Row 0 corresponds to the last tile in `wall` (the next tile to be drawn).
+      - Row 1 corresponds to the second‑last, etc.
+    Missing tiles (if wall is shorter than max_len) are zero‑padded.
+    Returns: (max_len, 46) np.ndarray, dtype=uint8
+    """
+    seq = np.zeros((max_len, 46), dtype=np.uint8)
+    for i, tile in enumerate(reversed(wall)):
+        if i >= max_len:
+            break
+        seq[i, tile] = 1
+    return seq
 
 def execute_add_kan(gamestate: GameState, player_idx: int, tile: int) -> None:
     """

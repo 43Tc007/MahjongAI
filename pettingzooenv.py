@@ -17,7 +17,7 @@ from copy import deepcopy
 
 class MahjongGameEnv(AECEnv):
     
-    metadata = {"render_modes": ["human"], "name": "MahjongV0"}
+    metadata = {"render_modes": [], "name": "MahjongV0"}
 
     def __init__(self, render_mode=None):
         self.possible_agents = [f"player_{i}" for i in range(4)]

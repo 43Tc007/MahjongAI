@@ -34,7 +34,7 @@ def dui_dui_hu(division: List[Tuple[int, int]]) -> int:
     for pack_type, tile in division:
         if pack_type == CHOW:
             return 0
-    return 1
+    return 3
 
 def fan_pai(division: List[Tuple[int, int]], player: int, round_wind: int, game_wind: int) -> int:
     res = 0
@@ -145,12 +145,13 @@ def gang_shang_kai_hua(game: GameState, player: int) -> int:
     return (game.log[game.logline, :42].sum().item() == 4 and game.current_player == player) * 1
 
 def kan_kan_hu(game: GameState, player: int, division: List[Tuple[int, int]], win_tile: int) -> int:
-    if not dui_dui_hu(division):
+    if not dui_dui_hu(division) or not men_qian_qing(game, player):
         return 0
     if tsumo(game, player):
-        return men_qian_qing(game, player) * 13
-    pair_tile: int = [tile for pack_type, tile in division if pack_type == PAIR][0]
-    return (win_tile == pair_tile) * 13
+        return 13
+    else:
+        pair_tile: int = [tile for pack_type, tile in division if pack_type == PAIR][0]
+        return (win_tile == pair_tile) * 13
 
 def hua_hu(game: GameState, player: int, win_tile: int) -> int:
     if is_flower(win_tile):
@@ -164,10 +165,12 @@ def calculate_fan(
 
     # Special hands that immediately return (they override everything else)
     if hua_hu(game, player, win_tile):
-        print("hua_hu:", hua_hu(game, player, win_tile))
+        if verbose:
+            print("hua_hu:", hua_hu(game, player, win_tile))
         return hua_hu(game, player, win_tile)
     if shi_san_yao(game.hands[player]):
-        print("shi_san_yao:", shi_san_yao(game.hands[player]))
+        if verbose:
+            print("shi_san_yao:", shi_san_yao(game.hands[player]))
         return 13
 
     success, divisions = divide_from_tensors(game.hands[player], game.melds[player])
@@ -297,7 +300,7 @@ if __name__ == '__main__':
 
     # Fill in some arbitrary values
     temp = np.array([
-        0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 8
+        21, 22, 23, 1, 2, 3, 4, 5, 6, 7, 7, 9, 10, 11
     ])
     for thing in temp:
         gamestate.hands[0][thing] += 1

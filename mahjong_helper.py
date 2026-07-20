@@ -16,7 +16,7 @@ def is_dragon(tile: int) -> bool:
     return tile >= 31 and tile <= 33
 
 def seat(player: int, game_wind: int):
-    return (player - game_wind + 4) % 4
+    return (int(player) - int(game_wind) + 4) % 4
 
 def is_zi(tile: int):
     return is_wind(tile) or is_dragon(tile)

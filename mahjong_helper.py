@@ -93,8 +93,8 @@ def melds_to_array(lst: List[np.ndarray]) -> np.ndarray:
 def game_state_mask(game: GameState, player_idx: int) -> np.ndarray:
     # round wind, game wind, current player, wall remaining,
     metadata_array = np.zeros(shape=(4, 42 + 4), dtype=np.uint8)
-    metadata_array[0, game.round_wind] = 4
-    metadata_array[1, game.game_wind] = 4
+    metadata_array[0, game.round_wind + 27] = 4
+    metadata_array[1, game.game_wind + 27] = 4
     metadata_array[2, game.current_player + 42] = 1
     metadata_array[3, :] = game.wall_remaining
 
@@ -133,6 +133,44 @@ def game_state_mask(game: GameState, player_idx: int) -> np.ndarray:
         game.log
     ])
 
+def game_state_mask_simplified(game: GameState, player_idx: int):
+    """
+    Returns a simplified observation
+    """
+    # metadata
+    metadata_array = np.zeros(shape=(4, 34), dtype=np.uint8)
+    metadata_array[0, game.round_wind + 27] = 4
+    metadata_array[1, seat(player_idx, game.game_wind) + 27] = 4
+    metadata_array[2, game.current_player + 27] = 1
+    metadata_array[3, :] = game.wall_remaining / 144
+    # one hand
+    hands_array = game.hands[player_idx][:34]
+    # flowers, use ESWN
+    flowers_array = np.hstack([np.zeros(shape=(4, 27)), np.stack(game.flowers)[:, 34:38] + np.stack(game.flowers)[:, 38:42], np.zeros(shape=(4, 3))])
+    # melds
+    melds_array = np.vstack([melds_to_array(game.melds[i]) for i in range(4)])[:, :34]
+    # discard
+    # from log add up all discards
+    discards = np.zeros(shape=(4, 34))
+    line_number = 0
+    while game.log[line_number].sum() > 0:
+        if game.log[line_number].sum() == 2 and not is_subsequently_called(game.log, line_number) and game.log[line_number][:34].sum() == 1:
+            idxs = np.nonzero(game.log[line_number])[0]
+            if idxs.size >= 2:
+                tile = int(idxs[0])
+                player_idx = int(idxs[1]) - 42
+                # guard: ensure valid player index
+                if 0 <= player_idx < 4:
+                    discards[player_idx, tile] += 1
+        line_number += 1
+    return np.vstack([
+        metadata_array,
+        hands_array,
+        melds_array,
+        flowers_array,
+        discards
+    ]) 
+
 def game_state_array(game: GameState) -> np.ndarray:
     # round wind, game wind, current player, wall remaining,
     metadata_array = np.zeros(shape=(4, 42 + 4), dtype=np.uint8)
@@ -170,6 +208,44 @@ def game_state_array(game: GameState) -> np.ndarray:
         flowers_array,
         game.log
     ])
+
+def game_state_array_simplified(game: GameState):
+    """
+    Returns a simplified observation
+    """
+    # metadata
+    metadata_array = np.zeros(shape=(4, 34), dtype=np.uint8)
+    metadata_array[0, game.round_wind + 27] = 4
+    metadata_array[1, game.game_wind + 27] = 4
+    metadata_array[2, game.current_player + 27] = 1
+    metadata_array[3, :] = game.wall_remaining / 144
+    # four hand
+    hands_array = melds_to_array(game.hands)[:, :34]
+    # flowers, use ESWN
+    flowers_array = np.hstack([np.zeros(shape=(4, 27)), np.stack(game.flowers)[:, 34:38] + np.stack(game.flowers)[:, 38:42], np.zeros(shape=(4, 3))])
+    # melds
+    melds_array = np.vstack([melds_to_array(game.melds[i]) for i in range(4)])[:, :34]
+    # discard
+    # from log add up all discards
+    discards = np.zeros(shape=(4, 34))
+    line_number = 0
+    while game.log[line_number].sum() > 0:
+        if game.log[line_number].sum() == 2 and not is_subsequently_called(game.log, line_number) and game.log[line_number][:34].sum() == 1:
+            idxs = np.nonzero(game.log[line_number])[0]
+            if idxs.size >= 2:
+                tile = int(idxs[0])
+                player_idx = int(idxs[1]) - 42
+                # guard: ensure valid player index
+                if 0 <= player_idx < 4:
+                    discards[player_idx, tile] += 1
+        line_number += 1
+    return np.vstack([
+        metadata_array,
+        hands_array,
+        melds_array,
+        flowers_array,
+        discards
+    ]) 
 
 def is_subsequently_called(log: np.ndarray, logline: int) -> bool:
     line = log[logline]
@@ -343,3 +419,13 @@ def execute_flower(gamestate: GameState, player_idx: int, tile: int) -> None:
     gamestate.log[gamestate.logline][42 + player_idx] += 1
     gamestate.logline += 1
 
+if __name__ == '__main__':
+    game = GameState(
+        EAST, EAST, SOUTH
+    )
+    obs = game_state_array_simplified(game)
+    obbs = game_state_mask_simplified(game, 0)
+    from pandas import DataFrame
+    x = obs.shape
+    y = obbs.shape
+    print(x, y)

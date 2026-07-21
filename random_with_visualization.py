@@ -1,5 +1,5 @@
 import numpy as np
-from pettingzooenv import MahjongGameEnv
+from env_v0 import MahjongGameEnv
 import time
 import pygame
 from pygame_visualizer import array_to_tile_string, melds_to_string, tiles_unicode, render_game_state

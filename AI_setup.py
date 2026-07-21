@@ -1,6 +1,6 @@
 import torch
 from torchrl.envs import PettingZooWrapper
-from pettingzooenv import MahjongGameEnv
+from env_v0 import MahjongGameEnv
 from torchrl.envs import TransformedEnv
 from torchrl.envs.transforms import ActionMask
 from torchrl.envs.utils import MarlGroupMapType

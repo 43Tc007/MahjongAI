@@ -33,7 +33,7 @@ class MahjongGameEnv(AECEnv):
         )
 
     def observation_space(self, agent) -> gymnasium.Space:
-        return spaces.Dict({'observation': spaces.Box(low=0, high=255, shape=(156, 46), dtype=np.uint8), 'action_mask': spaces.Box(low=0, high=1, shape=(75,), dtype=np.uint8)})
+        return spaces.Dict({'observation': spaces.Box(low=0.0, high=4.0, shape=(156, 46), dtype=np.float32), 'action_mask': spaces.Box(low=0, high=1, shape=(75,), dtype=np.float32)})
     
     def action_space(self, agent) -> gymnasium.Space:
         return Discrete(75)

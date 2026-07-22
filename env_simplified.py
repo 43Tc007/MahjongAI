@@ -54,7 +54,7 @@ class MahjongGameEnv(AECEnv):
         }
     
     def state(self):
-        return game_state_array_simplified(self.gamestate)
+        return np.vstack([np.hstack([game_state_array_simplified(self.gamestate), np.zeros(shape=(32, 8))]), wall_sequence_array_simplified(self.gamestate.wall)])
     
     def close(self):
         pass

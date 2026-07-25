@@ -1,5 +1,5 @@
 import numpy as np
-from env_v0 import MahjongGameEnv
+from env_simplified import MahjongGameEnv
 import time
 import pygame
 from pygame_visualizer import array_to_tile_string, melds_to_string, tiles_unicode, render_game_state
@@ -33,6 +33,7 @@ def main():
                     pygame.quit()
                     exit()
             screen.fill('white')
+            time.sleep(1)
             render_game_state(env.gamestate, screen, font)
             pygame.display.update()
 

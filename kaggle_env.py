@@ -4,7 +4,7 @@ import numpy.typing as npt
 
 from gymnasium import spaces
 from pettingzoo import AECEnv
-from pettingzoo.utils import AgentSelector
+from pettingzoo.utils import agent_selector
 from gymnasium.spaces import Discrete
 from gymnasium.utils import seeding
 from mahjong_helper import GameState, EAST, SOUTH, WEST, NORTH, game_state_mask, game_state_array
@@ -33,7 +33,7 @@ class MahjongGameEnv(AECEnv):
         )
 
     def observation_space(self, agent) -> gymnasium.Space:
-        return spaces.Dict({'observation': spaces.Box(low=0.0, high=4.0, shape=(156, 46), dtype=np.float32), 'action_mask': spaces.Box(low=0, high=1, shape=(75,), dtype=np.float32)})
+        return spaces.Dict({'observation': spaces.Box(low=0, high=255, shape=(29, 34), dtype=np.uint8), 'action_mask': spaces.Box(low=0, high=1, shape=(75,), dtype=np.uint8)})
     
     def action_space(self, agent) -> gymnasium.Space:
         return Discrete(75)
@@ -49,12 +49,12 @@ class MahjongGameEnv(AECEnv):
 
     def observe(self, agent):
         return {
-            'observation': game_state_mask(self.gamestate, self.agent_name_mapping[agent]),
+            'observation': game_state_mask_simplified(self.gamestate, self.agent_name_mapping[agent]),
             'action_mask': self.mask
         }
     
     def state(self):
-        return np.vstack([game_state_array(self.gamestate), wall_sequence_array(self.gamestate.wall)])
+        return np.vstack([np.hstack([game_state_array_simplified(self.gamestate), np.zeros(shape=(32, 8))]), wall_sequence_array_simplified(self.gamestate.wall)])
     
     def close(self):
         pass
@@ -68,7 +68,7 @@ class MahjongGameEnv(AECEnv):
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
-        self._agent_selector = AgentSelector(self.agents)
+        self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.next()
         self.gamestate = GameState(
             round_wind=np.random.randint(0, 4),
@@ -160,17 +160,17 @@ class MahjongGameEnv(AECEnv):
     
     def terminate_game(self, target_tile: int = -1, winnning_player_idx: int = -1, losing_player_idx: int = -1, terminate_type="exhausted"):
         payout = {
-            3 : 1,
-            4 : 2,
-            5 : 3,
-            6 : 4,
-            7 : 6,
-            8 : 8,
-            9 : 12,
-            10 : 16,
-            11 : 24,
-            12 : 32,
-            13 : 48
+            3 : 1 / 16,
+            4 : 2/ 16,
+            5 : 3/ 16,
+            6 : 4/ 16,
+            7 : 6/ 16,
+            8 : 8/ 16,
+            9 : 12/ 16,
+            10 : 16/ 16,
+            11 : 24/ 16,
+            12 : 32/ 16,
+            13 : 48/ 16
         }
 
         if terminate_type == "tsumo":
